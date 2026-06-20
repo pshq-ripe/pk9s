@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 11;
+use Test::More tests => 13;
 use lib 'lib';
 
 use_ok('pk9s::App');
@@ -20,6 +20,8 @@ is($app->{_selected_row}, 0, 'default selection is first row');
 is(pk9s::App::colorize_status('Running'), "\e[32mRunning\e[0m", 'colorize Running');
 is(pk9s::App::colorize_status('Pending'), "\e[33mPending\e[0m", 'colorize Pending');
 is(pk9s::App::colorize_status('Error'), "\e[31mError\e[0m", 'colorize Error');
+is(pk9s::App::colorize_status('Succeeded'), "\e[34mSucceeded\e[0m", 'colorize Succeeded');
+is(pk9s::App::colorize_status('Unknown'), "\e[37mUnknown\e[0m", 'colorize Unknown');
 
 my @views = pk9s::App::views();
 is(scalar @views, 4, 'has 4 views');
