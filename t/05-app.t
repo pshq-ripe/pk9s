@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 21;
+use Test::More tests => 23;
 use lib 'lib';
 
 use_ok('pk9s::App');
@@ -75,3 +75,13 @@ my $app2 = pk9s::App->new(
 $app2->_refresh_data();
 is(scalar @{$app2->{_resources}}, 1, 'refresh loads resources');
 is($app2->{_resources}[0]->name, 'test-pod', 'resource has correct name');
+
+# Test timer setup
+is($app2->{_refresh_interval}, 5, 'default refresh interval');
+
+my $app3 = pk9s::App->new(
+    config => bless({}, 'pk9s::Config'),
+    kubectl => bless({}, 'pk9s::Kubectl'),
+    refresh_interval => 10,
+);
+is($app3->{_refresh_interval}, 10, 'custom refresh interval');

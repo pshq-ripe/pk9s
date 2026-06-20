@@ -182,7 +182,15 @@ sub _key_end {
 
 sub _setup_timer {
     my ($self) = @_;
-    # Will be implemented in Task 6
+    require Tickit::Timer;
+    Tickit::Timer->import;
+    $self->{_timer} = Tickit::Timer->interval(
+        $self->{_refresh_interval},
+        sub {
+            return if $self->{_show_help};
+            $self->_refresh_data();
+        },
+    );
 }
 
 sub _refresh_data {
