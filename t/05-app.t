@@ -1,13 +1,14 @@
 use strict;
 use warnings;
-use Test::More tests => 18;
+use Test::More tests => 21;
 use lib 'lib';
 
 use_ok('pk9s::App');
+use_ok('pk9s::Config');
 use_ok('pk9s::Resource');
 
 my $app = pk9s::App->new(
-    config => bless({}, 'pk9s::Config'),
+    config => pk9s::Config->new(),
     kubectl => bless({}, 'pk9s::Kubectl'),
 );
 isa_ok($app, 'pk9s::App');
@@ -47,3 +48,30 @@ is($app->{_current_view}, 2, 'switch to next view again');
 
 $app->_switch_view(-1);
 is($app->{_current_view}, 1, 'switch to previous view');
+
+# Test _refresh_data with mock
+package MockKubectl {
+    use parent 'pk9s::Kubectl';
+
+    sub _run {
+        my ($self, @cmd) = @_;
+        return ('{
+            "apiVersion": "v1",
+            "items": [
+                {"metadata": {"name": "test-pod", "namespace": "default", "creationTimestamp": "2024-01-15T10:30:00Z"}, "status": {"phase": "Running", "containerStatuses": [{"ready": 1}]}}
+            ]
+        }', '');
+    }
+}
+
+package main;
+
+my $mock_kubectl = MockKubectl->new();
+my $app2 = pk9s::App->new(
+    config => pk9s::Config->new(),
+    kubectl => $mock_kubectl,
+);
+
+$app2->_refresh_data();
+is(scalar @{$app2->{_resources}}, 1, 'refresh loads resources');
+is($app2->{_resources}[0]->name, 'test-pod', 'resource has correct name');

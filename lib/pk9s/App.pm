@@ -187,7 +187,29 @@ sub _setup_timer {
 
 sub _refresh_data {
     my ($self) = @_;
-    # Will be implemented in Task 5
+    my $view = $VIEWS[$self->{_current_view}];
+
+    my $method = $view->{method};
+    my $data = $self->{kubectl}->$method(
+        namespace => $self->{config}->get('namespace'),
+    );
+
+    if ($data->{error}) {
+        $self->{_resources} = [];
+        return;
+    }
+
+    my $type = $view->{name};
+    $type =~ s/s$//;
+
+    my @resources = map {
+        pk9s::Resource->normalize($_, $type)
+    } @{$data->{items} // []};
+
+    $self->{_resources} = \@resources;
+    $self->{_last_refresh} = time();
+    $self->_clamp_selection();
+    $self->_render_table();
 }
 
 sub _render_table {
