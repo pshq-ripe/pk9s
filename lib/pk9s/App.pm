@@ -127,44 +127,57 @@ sub _setup_keybindings {
         }
 
         given ($str) {
-            when ('j' || 'Down') {
-                $self->{_selected_row}++;
-                $self->_clamp_selection();
-                $self->_render_table();
-            }
-            when ('k' || 'Up') {
-                $self->{_selected_row}--;
-                $self->_clamp_selection();
-                $self->_render_table();
-            }
-            when ('g' || 'Home') {
-                $self->{_selected_row} = 0;
-                $self->_render_table();
-            }
-            when ('G' || 'End') {
-                $self->{_selected_row} = scalar @{$self->{_resources}} - 1;
-                $self->_render_table();
-            }
+            when ('j') { $self->_key_down() }
+            when ('Down') { $self->_key_down() }
+            when ('k') { $self->_key_up() }
+            when ('Up') { $self->_key_up() }
+            when ('g') { $self->_key_home() }
+            when ('Home') { $self->_key_home() }
+            when ('G') { $self->_key_end() }
+            when ('End') { $self->_key_end() }
             when ('Tab') {
                 $self->_switch_view(1);
                 $self->_refresh_data();
             }
-            when ('BTab') {  # Shift+Tab
+            when ('BTab') {
                 $self->_switch_view(-1);
                 $self->_refresh_data();
             }
-            when ('r') {
-                $self->_refresh_data();
-            }
+            when ('r') { $self->_refresh_data() }
             when ('?') {
                 $self->{_show_help} = 1;
                 $self->_render_help();
             }
-            when ('q' || 'C-c') {
-                $self->{_tickit}->stop;
-            }
+            when ('q') { $self->{_tickit}->stop }
+            when ('C-c') { $self->{_tickit}->stop }
         }
     });
+}
+
+sub _key_down {
+    my ($self) = @_;
+    $self->{_selected_row}++;
+    $self->_clamp_selection();
+    $self->_render_table();
+}
+
+sub _key_up {
+    my ($self) = @_;
+    $self->{_selected_row}--;
+    $self->_clamp_selection();
+    $self->_render_table();
+}
+
+sub _key_home {
+    my ($self) = @_;
+    $self->{_selected_row} = 0;
+    $self->_render_table();
+}
+
+sub _key_end {
+    my ($self) = @_;
+    $self->{_selected_row} = scalar @{$self->{_resources}} - 1;
+    $self->_render_table();
 }
 
 sub _setup_timer {
