@@ -128,7 +128,62 @@ sub _refresh_data {
 
 sub _render_table {
     my ($self) = @_;
-    # Will be implemented in Task 3
+    my $win = $self->{_root_window};
+    return unless $win;
+
+    my $view = $VIEWS[$self->{_current_view}];
+    my $cols = $view->{columns};
+    my $resources = $self->{_resources};
+
+    my @widths = map { length($_) + 2 } @$cols;
+    for my $res (@$resources) {
+        my $row = $view->{extract}->($res);
+        for my $i (0..$#$row) {
+            my $len = length($row->[$i]) + 2;
+            $widths[$i] = $len if $len > $widths[$i];
+        }
+    }
+
+    my $header = '';
+    for my $i (0..$#$cols) {
+        $header .= sprintf("%-*s", $widths[$i], $cols->[$i]);
+    }
+    $win->printAt(0, 0, $header, 0);
+
+    my $sep = '─' x ($win->cols - 1);
+    $win->printAt(1, 0, $sep, 0);
+
+    my $row_num = 2;
+    my $start = $self->{_scroll_offset};
+    my $visible = $win->lines - 3;
+
+    for my $i ($start..$#$resources) {
+        last if $row_num >= $visible + 2;
+
+        my $res = $resources->[$i];
+        my $row = $view->{extract}->($res);
+        my $is_selected = ($i == $self->{_selected_row});
+
+        my $line = $is_selected ? '▶ ' : '  ';
+        for my $j (0..$#$row) {
+            my $val = $row->[$j];
+            if ($j == 1) {
+                $val = colorize_status($val);
+            }
+            $line .= sprintf("%-*s", $widths[$j], $val);
+        }
+
+        my $pen = $is_selected ? 1 : 0;
+        $win->printAt($row_num, 0, $line, $pen);
+        $row_num++;
+    }
+
+    for my $i ($row_num..$visible + 1) {
+        $win->eraseAt($i, 0, $win->cols);
+    }
+
+    my $footer = sprintf("j/k: navigate  Tab: switch view  r: refresh  ?: help  q: quit");
+    $win->printAt($win->lines - 1, 0, $footer, 0);
 }
 
 sub _render_help {

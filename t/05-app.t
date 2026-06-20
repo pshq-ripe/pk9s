@@ -1,9 +1,10 @@
 use strict;
 use warnings;
-use Test::More tests => 5;
+use Test::More tests => 11;
 use lib 'lib';
 
 use_ok('pk9s::App');
+use_ok('pk9s::Resource');
 
 my $app = pk9s::App->new(
     config => bless({}, 'pk9s::Config'),
@@ -15,3 +16,11 @@ can_ok($app, qw(run _refresh_data _render_table _render_help _switch_view));
 
 is($app->{_current_view}, 0, 'default view is pods');
 is($app->{_selected_row}, 0, 'default selection is first row');
+
+is(pk9s::App::colorize_status('Running'), "\e[32mRunning\e[0m", 'colorize Running');
+is(pk9s::App::colorize_status('Pending'), "\e[33mPending\e[0m", 'colorize Pending');
+is(pk9s::App::colorize_status('Error'), "\e[31mError\e[0m", 'colorize Error');
+
+my @views = pk9s::App::views();
+is(scalar @views, 4, 'has 4 views');
+is($views[0]{name}, 'pods', 'first view is pods');
