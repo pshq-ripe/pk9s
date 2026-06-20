@@ -7,9 +7,11 @@ WriteMakefile(
     AUTHOR       => 'pk9s contributors',
     LICENSE      => 'perl_5',
     PREREQ_PM    => {
-        'JSON::PP'   => 0,
-        'IPC::Open3' => 0,
-        'File::Temp' => 0,
+        'JSON::PP'         => 0,
+        'IPC::Open3'       => 0,
+        'File::Temp'       => 0,
+        'Tickit'           => 0,
+        'Term::ANSIColor'  => 0,
     },
     TEST_REQUIRES => {
         'Test::More' => 0.96,
