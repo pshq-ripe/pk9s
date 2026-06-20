@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 13;
+use Test::More tests => 18;
 use lib 'lib';
 
 use_ok('pk9s::App');
@@ -26,3 +26,24 @@ is(pk9s::App::colorize_status('Unknown'), "\e[37mUnknown\e[0m", 'colorize Unknow
 my @views = pk9s::App::views();
 is(scalar @views, 4, 'has 4 views');
 is($views[0]{name}, 'pods', 'first view is pods');
+
+# Test _clamp_selection
+$app->{_resources} = [1, 2, 3, 4, 5];
+$app->{_selected_row} = 10;
+$app->_clamp_selection();
+is($app->{_selected_row}, 4, 'clamp to max');
+
+$app->{_selected_row} = -5;
+$app->_clamp_selection();
+is($app->{_selected_row}, 0, 'clamp to min');
+
+# Test _switch_view
+$app->{_current_view} = 0;
+$app->_switch_view(1);
+is($app->{_current_view}, 1, 'switch to next view');
+
+$app->_switch_view(1);
+is($app->{_current_view}, 2, 'switch to next view again');
+
+$app->_switch_view(-1);
+is($app->{_current_view}, 1, 'switch to previous view');

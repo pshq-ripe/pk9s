@@ -1,6 +1,7 @@
 package pk9s::App;
 use strict;
 use warnings;
+use feature 'switch';
 use Term::ANSIColor;
 
 my @VIEWS = (
@@ -113,7 +114,57 @@ sub _build_ui {
 
 sub _setup_keybindings {
     my ($self) = @_;
-    # Will be implemented in Task 4
+    my $term = $self->{_tickit}->term;
+
+    $term->cb_keypress(sub {
+        my ($type, $str) = @_;
+        return unless $type eq 'key';
+
+        if ($self->{_show_help}) {
+            $self->{_show_help} = 0;
+            $self->_render_table();
+            return;
+        }
+
+        given ($str) {
+            when ('j' || 'Down') {
+                $self->{_selected_row}++;
+                $self->_clamp_selection();
+                $self->_render_table();
+            }
+            when ('k' || 'Up') {
+                $self->{_selected_row}--;
+                $self->_clamp_selection();
+                $self->_render_table();
+            }
+            when ('g' || 'Home') {
+                $self->{_selected_row} = 0;
+                $self->_render_table();
+            }
+            when ('G' || 'End') {
+                $self->{_selected_row} = scalar @{$self->{_resources}} - 1;
+                $self->_render_table();
+            }
+            when ('Tab') {
+                $self->_switch_view(1);
+                $self->_refresh_data();
+            }
+            when ('BTab') {  # Shift+Tab
+                $self->_switch_view(-1);
+                $self->_refresh_data();
+            }
+            when ('r') {
+                $self->_refresh_data();
+            }
+            when ('?') {
+                $self->{_show_help} = 1;
+                $self->_render_help();
+            }
+            when ('q' || 'C-c') {
+                $self->{_tickit}->stop;
+            }
+        }
+    });
 }
 
 sub _setup_timer {
@@ -193,7 +244,10 @@ sub _render_help {
 
 sub _switch_view {
     my ($self, $direction) = @_;
-    # Will be implemented in Task 4
+    my $num_views = scalar @VIEWS;
+    $self->{_current_view} = ($self->{_current_view} + $direction) % $num_views;
+    $self->{_selected_row} = 0;
+    $self->{_scroll_offset} = 0;
 }
 
 sub _clamp_selection {
