@@ -2,6 +2,28 @@
 use strict;
 use warnings;
 use lib 'lib';
-use pk9s;
+use pk9s::Kubectl;
+use pk9s::Resource;
+use pk9s::Config;
 
-print "pk9s v$pk9s::VERSION\n";
+my $config = pk9s::Config->new();
+my $kubectl = pk9s::Kubectl->new(
+    kubectl => $config->get('kubectl'),
+    context => $config->get('context'),
+);
+
+my $data = $kubectl->get_pods(namespace => $config->get('namespace'));
+
+if ($data->{error}) {
+    print STDERR "Error: $data->{error}\n";
+    exit 1;
+}
+
+my @pods = map { pk9s::Resource->normalize($_, 'pod') } @{$data->{items}};
+
+printf "%-40s %-15s %-10s\n", 'NAME', 'STATUS', 'READY';
+printf "%-40s %-15s %-10s\n", '-' x 40, '-' x 15, '-' x 10;
+
+for my $pod (@pods) {
+    printf "%-40s %-15s %-10s\n", $pod->name, $pod->status, $pod->ready;
+}
