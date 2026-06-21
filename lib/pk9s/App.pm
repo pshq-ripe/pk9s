@@ -148,7 +148,6 @@ sub _setup_keybindings {
         },
         'Enter' => sub {
             $self->{_search_active} = 0;
-            $self->_apply_search();
             $self->_render_table();
         },
         'C-u'   => sub {
@@ -174,12 +173,14 @@ sub _setup_keybindings {
                 $self->{_search_query} .= $str;
                 $self->_apply_search();
                 $self->_render_search();
+                $self->_render_table();
                 return;
             }
             if ($str eq 'Backspace') {
                 $self->{_search_query} =~ s/.$//;
                 $self->_apply_search();
                 $self->_render_search();
+                $self->_render_table();
                 return;
             }
         }
@@ -290,6 +291,8 @@ sub _render_table {
     my $start = $self->{_scroll_offset};
     my $visible = $win->lines - 3;
 
+    my $search = $self->{_search_regex} ? do { require pk9s::Search; pk9s::Search->new() } : undef;
+
     for my $i ($start..$#$resources) {
         last if $row_num >= $visible + 2;
 
@@ -304,11 +307,7 @@ sub _render_table {
             if ($j == 1) {
                 $val = colorize_status($val);
             }
-            if ($self->{_search_regex}) {
-                require pk9s::Search;
-                my $search = pk9s::Search->new();
-                $val = $search->highlight($val, $self->{_search_regex});
-            }
+            $val = $search->highlight($val, $self->{_search_regex}) if $search;
             $line .= $val;
         }
 
@@ -397,11 +396,16 @@ sub _switch_view {
     $self->{_current_view} = ($self->{_current_view} + $direction) % $num_views;
     $self->{_selected_row} = 0;
     $self->{_scroll_offset} = 0;
+    $self->{_search_active} = 0;
+    $self->{_search_query} = '';
+    $self->{_search_regex} = undef;
+    $self->{_filtered_resources} = [];
 }
 
 sub _clamp_selection {
     my ($self) = @_;
-    my $max = scalar @{$self->{_resources}} - 1;
+    my $list = $self->{_search_active} ? $self->{_filtered_resources} : $self->{_resources};
+    my $max = scalar @$list - 1;
     $self->{_selected_row} = 0 if $self->{_selected_row} < 0 || $max < 0;
     $self->{_selected_row} = $max if $max >= 0 && $self->{_selected_row} > $max;
 }
