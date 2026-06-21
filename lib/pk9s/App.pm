@@ -413,14 +413,44 @@ sub _apply_search {
     
     $self->{_search_regex} = $search->build_regex($term);
     
-    my $view = $VIEWS[$self->{_current_view}];
-    $self->{_filtered_resources} = [
-        $search->filter(
-            resources => $self->{_resources},
-            regex => $self->{_search_regex},
-            extract => $view->{extract},
-        )
-    ];
+    if ($scope eq 'all') {
+        for my $i (0..$#VIEWS) {
+            my $view = $VIEWS[$i];
+            my $data = $self->{kubectl}->$view->{method}(
+                namespace => $self->{config}->get('namespace'),
+            );
+            next if $data->{error};
+            
+            my $type = $view->{name};
+            $type =~ s/s$//;
+            
+            my @resources = map {
+                pk9s::Resource->normalize($_, $type)
+            } @{$data->{items} // []};
+            
+            my @filtered = $search->filter(
+                resources => \@resources,
+                regex => $self->{_search_regex},
+                extract => $view->{extract},
+            );
+            
+            if (@filtered) {
+                $self->{_current_view} = $i;
+                $self->{_filtered_resources} = \@filtered;
+                $self->{_resources} = \@resources;
+                last;
+            }
+        }
+    } else {
+        my $view = $VIEWS[$self->{_current_view}];
+        $self->{_filtered_resources} = [
+            $search->filter(
+                resources => $self->{_resources},
+                regex => $self->{_search_regex},
+                extract => $view->{extract},
+            )
+        ];
+    }
     
     $self->{_selected_row} = 0;
     $self->_clamp_selection();

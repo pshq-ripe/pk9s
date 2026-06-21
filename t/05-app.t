@@ -155,10 +155,10 @@ is(scalar @filtered, 2, 'filter returns matching resources');
 is($filtered[0]->name, 'nginx-deploy', 'first match is nginx-deploy');
 is($filtered[1]->name, 'nginx-pod', 'second match is nginx-pod');
 
-# Test cross-view search
+# Test cross-view search parsing
 my ($term2, $scope2) = $search->parse_query('all:redis');
-is($term2, 'redis', 'cross-view parse_query term');
-is($scope2, 'all', 'cross-view parse_query scope is all');
+is($term2, 'redis', 'cross-view parse extracts term');
+is($scope2, 'all', 'cross-view parse returns all scope');
 
 # Test empty query
 my ($term3, $scope3) = $search->parse_query('');
