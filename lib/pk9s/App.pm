@@ -282,7 +282,45 @@ sub _render_table {
 
 sub _render_help {
     my ($self) = @_;
-    # Will be implemented in Task 7
+    my $win = $self->{_root_window};
+    return unless $win;
+
+    my @help_lines = (
+        'pk9s — Help',
+        '',
+        'Navigation:',
+        '  j / ↓      Move down',
+        '  k / ↑      Move up',
+        '  g / Home   Jump to top',
+        '  G / End    Jump to bottom',
+        '',
+        'Views:',
+        '  Tab        Next view',
+        '  Shift+Tab  Previous view',
+        '',
+        'Actions:',
+        '  r          Refresh data',
+        '  ?          Toggle this help',
+        '  q          Quit',
+        '',
+        'Press any key to close',
+    );
+
+    for my $i (0..$win->lines - 1) {
+        $win->eraseAt($i, 0, $win->cols);
+    }
+
+    my $box_width = 50;
+    my $box_left = ($win->cols - $box_width) / 2;
+    my $box_top = 2;
+
+    $win->printAt($box_top, $box_left, '┌' . '─' x ($box_width - 2) . '┐', 0);
+    for my $i (0..$#help_lines) {
+        my $line = $help_lines[$i];
+        my $padded = sprintf('│ %-*s │', $box_width - 4, $line);
+        $win->printAt($box_top + 1 + $i, $box_left, $padded, 0);
+    }
+    $win->printAt($box_top + scalar(@help_lines) + 1, $box_left, '└' . '─' x ($box_width - 2) . '┘', 0);
 }
 
 sub _switch_view {

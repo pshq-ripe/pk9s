@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 23;
+use Test::More tests => 25;
 use lib 'lib';
 
 use_ok('pk9s::App');
@@ -85,3 +85,10 @@ my $app3 = pk9s::App->new(
     refresh_interval => 10,
 );
 is($app3->{_refresh_interval}, 10, 'custom refresh interval');
+
+# Test _render_help exists
+can_ok($app, '_render_help');
+
+# Test show_help flag
+$app->{_show_help} = 0;
+is($app->{_show_help}, 0, 'help initially hidden');
