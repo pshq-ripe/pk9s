@@ -109,7 +109,7 @@ sub run {
 
 sub _build_ui {
     my ($self) = @_;
-    # Will be implemented in Task 3
+    $self->{_root_window} = $self->{_tickit}->root;
 }
 
 sub _setup_keybindings {
