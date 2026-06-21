@@ -22,11 +22,11 @@ sub build_regex {
     my ($self, $term) = @_;
     return undef unless defined $term && length $term;
     
-    # Convert * to .* for glob-style matching first
-    $term =~ s/\*/.*/g;
+    # Escape special regex characters (except *)
+    $term =~ s/([.+?^\$\[\]{}|\\()])/\\$1/g;
     
-    # Escape special regex characters
-    $term =~ s/([.+?^\[\]{}|()])/\\$1/g;
+    # Convert * to .* for glob-style matching
+    $term =~ s/\*/.*/g;
     
     # Build case-insensitive regex
     return qr/$term/i;
