@@ -91,6 +91,10 @@ sub new {
         _show_help => 0,
         _refresh_interval => $args{refresh_interval} || 5,
         _last_refresh => 0,
+        _search_active => 0,
+        _search_query => '',
+        _search_regex => undef,
+        _filtered_resources => [],
     };
     return bless $self, $class;
 }
