@@ -285,9 +285,11 @@ sub _render_help {
     my $win = $self->{_root_window};
     return unless $win;
 
+    my $box_width = 50;
+
     my @help_lines = (
         'pk9s — Help',
-        '',
+        "\x{2500}" x ($box_width - 2),
         'Navigation:',
         '  j / ↓      Move down',
         '  k / ↑      Move up',
@@ -302,7 +304,7 @@ sub _render_help {
         '  r          Refresh data',
         '  ?          Toggle this help',
         '  q          Quit',
-        '',
+        "\x{2500}" x ($box_width - 2),
         'Press any key to close',
     );
 
@@ -310,7 +312,6 @@ sub _render_help {
         $win->eraseAt($i, 0, $win->cols);
     }
 
-    my $box_width = 50;
     my $box_left = ($win->cols - $box_width) / 2;
     my $box_top = 2;
 
