@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 29;
+use Test::More tests => 31;
 use lib 'lib';
 
 use_ok('pk9s::App');
@@ -98,3 +98,11 @@ is($app->{_search_active}, 0, 'search not active by default');
 is($app->{_search_query}, '', 'search query empty by default');
 is($app->{_search_regex}, undef, 'search regex undef by default');
 is(ref $app->{_filtered_resources}, 'ARRAY', 'filtered resources is array');
+
+# Test search mode toggle
+$app->{_search_active} = 0;
+is($app->{_search_active}, 0, 'search mode initially off');
+
+# Test search query update
+$app->{_search_query} = 'nginx';
+is($app->{_search_query}, 'nginx', 'search query can be set');

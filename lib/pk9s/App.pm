@@ -135,6 +135,28 @@ sub _setup_keybindings {
         '?'     => sub { $self->{_show_help} = 1; $self->_render_help(); },
         'q'     => sub { $self->{_tickit}->stop },
         'C-c'   => sub { $self->{_tickit}->stop },
+        '/'     => sub {
+            $self->{_search_active} = 1;
+            $self->{_search_query} = '';
+            $self->{_search_regex} = undef;
+            $self->{_filtered_resources} = $self->{_resources};
+            $self->_render_search();
+        },
+        'Escape' => sub {
+            $self->{_search_active} = 0;
+            $self->_render_table();
+        },
+        'Enter' => sub {
+            $self->{_search_active} = 0;
+            $self->_apply_search();
+            $self->_render_table();
+        },
+        'C-u'   => sub {
+            $self->{_search_query} = '';
+            $self->{_search_regex} = undef;
+            $self->{_filtered_resources} = $self->{_resources};
+            $self->_render_search() if $self->{_search_active};
+        },
     );
 
     $term->cb_keypress(sub {
@@ -145,6 +167,21 @@ sub _setup_keybindings {
             $self->{_show_help} = 0;
             $self->_render_table();
             return;
+        }
+
+        if ($self->{_search_active}) {
+            if (length($str) == 1 && $str =~ /[[:print:]]/) {
+                $self->{_search_query} .= $str;
+                $self->_apply_search();
+                $self->_render_search();
+                return;
+            }
+            if ($str eq 'Backspace') {
+                $self->{_search_query} =~ s/.$//;
+                $self->_apply_search();
+                $self->_render_search();
+                return;
+            }
         }
 
         my $handler = $handlers{$str};
