@@ -418,9 +418,11 @@ sub _apply_search {
     $self->{_search_regex} = $search->build_regex($term);
     
     if ($scope eq 'all') {
+        my $found = 0;
         for my $i (0..$#VIEWS) {
             my $view = $VIEWS[$i];
-            my $data = $self->{kubectl}->$view->{method}(
+            my $method = $view->{method};
+            my $data = $self->{kubectl}->$method(
                 namespace => $self->{config}->get('namespace'),
             );
             next if $data->{error};
@@ -442,9 +444,12 @@ sub _apply_search {
                 $self->{_current_view} = $i;
                 $self->{_filtered_resources} = \@filtered;
                 $self->{_resources} = \@resources;
+                $found = 1;
                 last;
             }
         }
+        
+        $self->{_filtered_resources} = [] unless $found;
     } else {
         my $view = $VIEWS[$self->{_current_view}];
         $self->{_filtered_resources} = [

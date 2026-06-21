@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 47;
+use Test::More tests => 66;
 use lib 'lib';
 
 use_ok('pk9s::App');
@@ -185,3 +185,121 @@ is($app5->{_filtered_resources}[0]->name, 'nginx-deploy', 'filtered resource is 
 # Verify that when search is inactive, full resources are used
 $app5->{_search_active} = 0;
 is(scalar @{$app5->{_resources}}, 3, 'full resources has all 3 items');
+
+# --- Cross-view search tests ---
+
+# Mock kubectl that returns different resources per view method
+package MockMultiViewKubectl {
+    sub get_pods {
+        my ($self, %args) = @_;
+        return {
+            items => [
+                { metadata => { name => 'nginx-pod', namespace => $args{namespace}, creationTimestamp => '2024-01-15T10:00:00Z' },
+                  status => { phase => 'Running', containerStatuses => [{ ready => 1 }] } },
+                { metadata => { name => 'redis-pod', namespace => $args{namespace}, creationTimestamp => '2024-01-15T10:00:00Z' },
+                  status => { phase => 'Running', containerStatuses => [{ ready => 1 }] } },
+            ],
+        };
+    }
+
+    sub get_deployments {
+        my ($self, %args) = @_;
+        return {
+            items => [
+                { metadata => { name => 'nginx-deploy', namespace => $args{namespace}, creationTimestamp => '2024-01-15T10:00:00Z' },
+                  status => { replicas => 2, readyReplicas => 2, updatedReplicas => 2, availableReplicas => 2 } },
+            ],
+        };
+    }
+
+    sub get_services {
+        my ($self, %args) = @_;
+        return {
+            items => [
+                { metadata => { name => 'redis-svc', namespace => $args{namespace}, creationTimestamp => '2024-01-15T10:00:00Z' },
+                  spec => { type => 'ClusterIP', clusterIP => '10.0.0.1' } },
+            ],
+        };
+    }
+
+    sub get_nodes {
+        my ($self, %args) = @_;
+        return { items => [] };
+    }
+}
+
+package main;
+
+my $mock_multi = bless {}, 'MockMultiViewKubectl';
+my $app6 = pk9s::App->new(
+    config => pk9s::Config->new(),
+    kubectl => $mock_multi,
+);
+
+# Test: cross-view search for "redis" should find it in pods first
+$app6->{_search_query} = 'all:redis';
+$app6->_apply_search();
+is($app6->{_current_view}, 0, 'cross-view search switches to pods view for redis');
+is(scalar @{$app6->{_filtered_resources}}, 1, 'cross-view filters to matching resources');
+is($app6->{_filtered_resources}[0]->name, 'redis-pod', 'cross-view finds redis-pod');
+
+# Test: cross-view search for "nginx" should find it in pods first
+$app6->{_current_view} = 0;
+$app6->{_search_query} = 'all:nginx';
+$app6->_apply_search();
+is($app6->{_current_view}, 0, 'cross-view search finds nginx in pods view');
+is(scalar @{$app6->{_filtered_resources}}, 1, 'cross-view finds nginx-pod in pods view');
+
+# Test: cross-view search for "svc" should switch to services view
+$app6->{_current_view} = 0;
+$app6->{_search_query} = 'all:svc';
+$app6->_apply_search();
+is($app6->{_current_view}, 2, 'cross-view search switches to services view for svc');
+is(scalar @{$app6->{_filtered_resources}}, 1, 'cross-view finds redis-svc');
+is($app6->{_filtered_resources}[0]->name, 'redis-svc', 'cross-view finds redis-svc by svc match');
+
+# Test: cross-view search with no matches stays on current view
+$app6->{_current_view} = 1;
+$app6->{_search_query} = 'all:zzzznonexistent';
+$app6->_apply_search();
+is($app6->{_current_view}, 1, 'cross-view search stays on current view when no matches');
+is(scalar @{$app6->{_filtered_resources}}, 0, 'cross-view returns empty when no matches');
+
+# Test: cross-view search sets search_regex
+$app6->{_search_query} = 'all:redis';
+$app6->_apply_search();
+ok(defined $app6->{_search_regex}, 'cross-view search sets search_regex');
+like('redis-pod', $app6->{_search_regex}, 'search_regex matches correctly');
+
+# Test: cross-view search resets selected_row to 0
+$app6->{_selected_row} = 5;
+$app6->{_search_query} = 'all:redis';
+$app6->_apply_search();
+is($app6->{_selected_row}, 0, 'cross-view search resets selection to 0');
+
+# Test: scoped search on current view only
+$app6->{_current_view} = 2;  # services view
+my @svc_resources = (
+    bless({ name => 'redis-svc' }, 'MockResource'),
+    bless({ name => 'nginx-svc' }, 'MockResource'),
+);
+$app6->{_resources} = \@svc_resources;
+$app6->{_search_query} = 'redis';
+$app6->_apply_search();
+is($app6->{_current_view}, 2, 'scoped search stays on current view');
+is(scalar @{$app6->{_filtered_resources}}, 1, 'scoped search filters to matching resources');
+is($app6->{_filtered_resources}[0]->name, 'redis-svc', 'scoped search finds redis-svc');
+
+# Test: empty search restores all resources
+$app6->{_search_query} = '';
+$app6->_apply_search();
+is(scalar @{$app6->{_filtered_resources}}, 2, 'empty search restores all resources');
+
+# Test: search_regex is cleared on empty query
+$app6->{_search_regex} = qr/whatever/;
+$app6->{_search_query} = '';
+$app6->_apply_search();
+is($app6->{_search_regex}, undef, 'empty search clears search_regex');
+
+# Test: can_ok for _apply_search
+can_ok($app, '_apply_search');
