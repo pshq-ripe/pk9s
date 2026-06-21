@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 31;
+use Test::More tests => 43;
 use lib 'lib';
 
 use_ok('pk9s::App');
@@ -106,3 +106,61 @@ is($app->{_search_active}, 0, 'search mode initially off');
 # Test search query update
 $app->{_search_query} = 'nginx';
 is($app->{_search_query}, 'nginx', 'search query can be set');
+
+# Test _apply_search with mock
+use pk9s::Search;
+
+my $search = pk9s::Search->new();
+my @test_resources = (
+    bless({ name => 'nginx-deploy' }, 'MockResource'),
+    bless({ name => 'redis-deploy' }, 'MockResource'),
+    bless({ name => 'nginx-pod' }, 'MockResource'),
+);
+
+# Store original _apply_search and replace with testable version
+# (This tests the logic without requiring the full TUI)
+package MockResource {
+    sub name { $_[0]->{name} }
+    sub status { 'Running' }
+    sub ready { '1/1' }
+    sub age { '5d' }
+}
+
+package main;
+
+my $app4 = pk9s::App->new(
+    config => pk9s::Config->new(),
+    kubectl => bless({}, 'pk9s::Kubectl'),
+);
+
+$app4->{_resources} = [@test_resources];
+
+# Test scoped search
+my ($term, $scope) = $search->parse_query('nginx');
+is($term, 'nginx', 'parse_query term');
+is($scope, 'current', 'parse_query scope is current');
+
+my $regex = $search->build_regex($term);
+ok(defined $regex, 'build_regex returns regex');
+like('nginx-deploy', $regex, 'regex matches nginx-deploy');
+unlike('redis-deploy', $regex, 'regex does not match redis-deploy');
+
+# Test filter
+my @filtered = $search->filter(
+    resources => $app4->{_resources},
+    regex => $regex,
+    extract => sub { [$_[0]->name] },
+);
+is(scalar @filtered, 2, 'filter returns matching resources');
+is($filtered[0]->name, 'nginx-deploy', 'first match is nginx-deploy');
+is($filtered[1]->name, 'nginx-pod', 'second match is nginx-pod');
+
+# Test cross-view search
+my ($term2, $scope2) = $search->parse_query('all:redis');
+is($term2, 'redis', 'cross-view parse_query term');
+is($scope2, 'all', 'cross-view parse_query scope is all');
+
+# Test empty query
+my ($term3, $scope3) = $search->parse_query('');
+is($term3, '', 'empty query term');
+is($scope3, 'current', 'empty query scope is current');

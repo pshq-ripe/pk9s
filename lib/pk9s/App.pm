@@ -397,6 +397,35 @@ sub _clamp_selection {
     $self->{_selected_row} = $max if $max >= 0 && $self->{_selected_row} > $max;
 }
 
+sub _apply_search {
+    my ($self) = @_;
+    
+    require pk9s::Search;
+    my $search = pk9s::Search->new();
+    
+    my ($term, $scope) = $search->parse_query($self->{_search_query});
+    
+    if (length($term) == 0) {
+        $self->{_search_regex} = undef;
+        $self->{_filtered_resources} = $self->{_resources};
+        return;
+    }
+    
+    $self->{_search_regex} = $search->build_regex($term);
+    
+    my $view = $VIEWS[$self->{_current_view}];
+    $self->{_filtered_resources} = [
+        $search->filter(
+            resources => $self->{_resources},
+            regex => $self->{_search_regex},
+            extract => $view->{extract},
+        )
+    ];
+    
+    $self->{_selected_row} = 0;
+    $self->_clamp_selection();
+}
+
 sub colorize_status {
     my ($status) = @_;
     my $color = $STATUS_COLORS{$status} || 'white';
