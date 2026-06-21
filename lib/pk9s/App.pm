@@ -262,7 +262,11 @@ sub _render_table {
 
     my $view = $VIEWS[$self->{_current_view}];
     my $cols = $view->{columns};
-    my $resources = $self->{_resources};
+
+    # Use filtered resources when search is active
+    my $resources = $self->{_search_active} 
+        ? $self->{_filtered_resources} 
+        : $self->{_resources};
 
     my @widths = map { length($_) + 2 } @$cols;
     for my $res (@$resources) {

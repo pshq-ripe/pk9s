@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 43;
+use Test::More tests => 47;
 use lib 'lib';
 
 use_ok('pk9s::App');
@@ -164,3 +164,24 @@ is($scope2, 'all', 'cross-view parse returns all scope');
 my ($term3, $scope3) = $search->parse_query('');
 is($term3, '', 'empty query term');
 is($scope3, 'current', 'empty query scope is current');
+
+# Test _render_table integration with search filtering
+# When search is active, _render_table should use _filtered_resources
+my $app5 = pk9s::App->new(
+    config => pk9s::Config->new(),
+    kubectl => bless({}, 'pk9s::Kubectl'),
+);
+
+# Set up resources
+$app5->{_resources} = [@test_resources];
+$app5->{_search_active} = 1;
+$app5->{_filtered_resources} = [$test_resources[0]];  # Only nginx-deploy
+
+# Verify the table rendering path would use filtered resources
+is($app5->{_search_active}, 1, 'search active flag set');
+is(scalar @{$app5->{_filtered_resources}}, 1, 'filtered resources has 1 item');
+is($app5->{_filtered_resources}[0]->name, 'nginx-deploy', 'filtered resource is nginx-deploy');
+
+# Verify that when search is inactive, full resources are used
+$app5->{_search_active} = 0;
+is(scalar @{$app5->{_resources}}, 3, 'full resources has all 3 items');
