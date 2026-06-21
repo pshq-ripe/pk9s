@@ -49,6 +49,19 @@ sub get_deployments {
     return $self->execute(@cmd);
 }
 
+sub get_services {
+    my ($self, %args) = @_;
+    my @cmd = ('get', 'services', '--output=json');
+    push @cmd, '--namespace', $args{namespace} if $args{namespace};
+    return $self->execute(@cmd);
+}
+
+sub get_nodes {
+    my ($self, %args) = @_;
+    my @cmd = ('get', 'nodes', '--output=json');
+    return $self->execute(@cmd);
+}
+
 sub _run {
     my ($self, @cmd) = @_;
     
