@@ -284,15 +284,16 @@ sub _render_help {
     my ($self) = @_;
     my $win = $self->{_root_window};
     return unless $win;
-
+    
     my $box_width = 50;
-
+    my $sep_line = "\x{2500}" x ($box_width - 2);
+    
     my @help_lines = (
         'pk9s — Help',
-        "\x{2500}" x ($box_width - 2),
+        '',
         'Navigation:',
-        '  j / ↓      Move down',
-        '  k / ↑      Move up',
+        '  j / \x{2193}      Move down',
+        '  k / \x{2191}      Move up',
         '  g / Home   Jump to top',
         '  G / End    Jump to bottom',
         '',
@@ -304,24 +305,32 @@ sub _render_help {
         '  r          Refresh data',
         '  ?          Toggle this help',
         '  q          Quit',
-        "\x{2500}" x ($box_width - 2),
+        '',
         'Press any key to close',
     );
-
+    
     for my $i (0..$win->lines - 1) {
         $win->eraseAt($i, 0, $win->cols);
     }
-
+    
     my $box_left = ($win->cols - $box_width) / 2;
     my $box_top = 2;
-
-    $win->printAt($box_top, $box_left, '┌' . '─' x ($box_width - 2) . '┐', 0);
+    
+    $win->printAt($box_top, $box_left, "\x{250c}" . $sep_line . "\x{2510}", 0);
+    
     for my $i (0..$#help_lines) {
         my $line = $help_lines[$i];
-        my $padded = sprintf('│ %-*s │', $box_width - 4, $line);
+        my $padded;
+        
+        if ($line eq '' && ($i == 1 || $i == $#help_lines - 1)) {
+            $padded = "\x{251c}" . $sep_line . "\x{2524}";
+        } else {
+            $padded = sprintf("\x{2502} %-*s \x{2502}", $box_width - 4, $line);
+        }
         $win->printAt($box_top + 1 + $i, $box_left, $padded, 0);
     }
-    $win->printAt($box_top + scalar(@help_lines) + 1, $box_left, '└' . '─' x ($box_width - 2) . '┘', 0);
+    
+    $win->printAt($box_top + scalar(@help_lines) + 1, $box_left, "\x{2514}" . $sep_line . "\x{2518}", 0);
 }
 
 sub _switch_view {
