@@ -1,7 +1,7 @@
 package pk9s::App;
 use strict;
 use warnings;
-use feature 'switch';
+
 use Term::ANSIColor;
 
 my @VIEWS = (
@@ -116,6 +116,23 @@ sub _setup_keybindings {
     my ($self) = @_;
     my $term = $self->{_tickit}->term;
 
+    my %handlers = (
+        'j'     => sub { $self->_key_down() },
+        'Down'  => sub { $self->_key_down() },
+        'k'     => sub { $self->_key_up() },
+        'Up'    => sub { $self->_key_up() },
+        'g'     => sub { $self->_key_home() },
+        'Home'  => sub { $self->_key_home() },
+        'G'     => sub { $self->_key_end() },
+        'End'   => sub { $self->_key_end() },
+        'Tab'   => sub { $self->_switch_view(1); $self->_refresh_data(); },
+        'BTab'  => sub { $self->_switch_view(-1); $self->_refresh_data(); },
+        'r'     => sub { $self->_refresh_data() },
+        '?'     => sub { $self->{_show_help} = 1; $self->_render_help(); },
+        'q'     => sub { $self->{_tickit}->stop },
+        'C-c'   => sub { $self->{_tickit}->stop },
+    );
+
     $term->cb_keypress(sub {
         my ($type, $str) = @_;
         return unless $type eq 'key';
@@ -126,31 +143,8 @@ sub _setup_keybindings {
             return;
         }
 
-        given ($str) {
-            when ('j') { $self->_key_down() }
-            when ('Down') { $self->_key_down() }
-            when ('k') { $self->_key_up() }
-            when ('Up') { $self->_key_up() }
-            when ('g') { $self->_key_home() }
-            when ('Home') { $self->_key_home() }
-            when ('G') { $self->_key_end() }
-            when ('End') { $self->_key_end() }
-            when ('Tab') {
-                $self->_switch_view(1);
-                $self->_refresh_data();
-            }
-            when ('BTab') {
-                $self->_switch_view(-1);
-                $self->_refresh_data();
-            }
-            when ('r') { $self->_refresh_data() }
-            when ('?') {
-                $self->{_show_help} = 1;
-                $self->_render_help();
-            }
-            when ('q') { $self->{_tickit}->stop }
-            when ('C-c') { $self->{_tickit}->stop }
-        }
+        my $handler = $handlers{$str};
+        $handler->() if $handler;
     });
 }
 
@@ -261,10 +255,11 @@ sub _render_table {
         my $line = $is_selected ? '▶ ' : '  ';
         for my $j (0..$#$row) {
             my $val = $row->[$j];
+            $val = sprintf("%-*s", $widths[$j], $val);
             if ($j == 1) {
                 $val = colorize_status($val);
             }
-            $line .= sprintf("%-*s", $widths[$j], $val);
+            $line .= $val;
         }
 
         my $pen = $is_selected ? 1 : 0;
@@ -344,8 +339,8 @@ sub _switch_view {
 sub _clamp_selection {
     my ($self) = @_;
     my $max = scalar @{$self->{_resources}} - 1;
-    $self->{_selected_row} = 0 if $self->{_selected_row} < 0;
-    $self->{_selected_row} = $max if $self->{_selected_row} > $max;
+    $self->{_selected_row} = 0 if $self->{_selected_row} < 0 || $max < 0;
+    $self->{_selected_row} = $max if $max >= 0 && $self->{_selected_row} > $max;
 }
 
 sub colorize_status {
