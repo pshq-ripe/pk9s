@@ -316,6 +316,19 @@ sub _render_table {
     $win->printAt($win->lines - 1, 0, $footer, 0);
 }
 
+sub _render_search {
+    my ($self) = @_;
+    my $win = $self->{_root_window};
+    return unless $win;
+
+    my $query = $self->{_search_query};
+    my $count = scalar @{$self->{_filtered_resources}};
+    my $total = scalar @{$self->{_resources}};
+
+    my $line = sprintf("/ %-50s [%d/%d]", $query, $count, $total);
+    $win->printAt($win->lines - 1, 0, $line, 0);
+}
+
 sub _render_help {
     my ($self) = @_;
     my $win = $self->{_root_window};
