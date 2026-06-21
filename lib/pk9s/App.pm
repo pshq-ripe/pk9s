@@ -304,6 +304,11 @@ sub _render_table {
             if ($j == 1) {
                 $val = colorize_status($val);
             }
+            if ($self->{_search_regex}) {
+                require pk9s::Search;
+                my $search = pk9s::Search->new();
+                $val = $search->highlight($val, $self->{_search_regex});
+            }
             $line .= $val;
         }
 

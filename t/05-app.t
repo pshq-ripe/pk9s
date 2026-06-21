@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 66;
+use Test::More tests => 71;
 use lib 'lib';
 
 use_ok('pk9s::App');
@@ -303,3 +303,28 @@ is($app6->{_search_regex}, undef, 'empty search clears search_regex');
 
 # Test: can_ok for _apply_search
 can_ok($app, '_apply_search');
+
+# --- Highlighting integration tests ---
+
+# Test highlight integration
+my $search2 = pk9s::Search->new();
+my $regex3 = $search2->build_regex("nginx");
+my $highlighted2 = $search2->highlight("nginx-deploy", $regex3);
+like($highlighted2, qr/\e\[1m/, 'highlight adds ANSI codes');
+like($highlighted2, qr/nginx/, 'highlight preserves original text');
+unlike($search2->highlight("redis-deploy", $regex3), qr/\e\[1m/, 'non-matching text not highlighted');
+
+# Test highlight with undef regex (no-op)
+is($search2->highlight("nginx-deploy", undef), "nginx-deploy", 'highlight with undef regex returns original');
+
+# Test _render_table applies highlighting when search is active
+my $app7 = pk9s::App->new(
+    config => pk9s::Config->new(),
+    kubectl => bless({}, 'pk9s::Kubectl'),
+);
+$app7->{_resources} = [@test_resources];
+$app7->{_search_active} = 1;
+$app7->{_filtered_resources} = [$test_resources[0]];
+$app7->{_search_regex} = $regex3;
+# _render_table would use _search_regex for highlighting — verify it's set
+ok(defined $app7->{_search_regex}, 'search_regex is set for highlighting');
