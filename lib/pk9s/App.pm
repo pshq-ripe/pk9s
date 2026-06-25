@@ -68,6 +68,20 @@ my @VIEWS = (
             ];
         },
     },
+    {
+        name => 'configmaps',
+        label => 'ConfigMaps',
+        method => 'get_configmaps',
+        columns => ['NAME', 'KEYS', 'AGE'],
+        extract => sub {
+            my ($resource) = @_;
+            return [
+                $resource->name,
+                $resource->ready,
+                $resource->age,
+            ];
+        },
+    },
 );
 
 my %STATUS_COLORS = (

@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 71;
+use Test::More tests => 72;
 use lib 'lib';
 
 use_ok('pk9s::App');
@@ -25,8 +25,9 @@ is(pk9s::App::colorize_status('Succeeded'), "\e[34mSucceeded\e[0m", 'colorize Su
 is(pk9s::App::colorize_status('Unknown'), "\e[37mUnknown\e[0m", 'colorize Unknown');
 
 my @views = pk9s::App::views();
-is(scalar @views, 4, 'has 4 views');
+is(scalar @views, 5, 'has 5 views');
 is($views[0]{name}, 'pods', 'first view is pods');
+is($views[4]{name}, 'configmaps', 'fifth view is configmaps');
 
 # Test _clamp_selection
 $app->{_resources} = [1, 2, 3, 4, 5];
@@ -225,6 +226,16 @@ package MockMultiViewKubectl {
     sub get_nodes {
         my ($self, %args) = @_;
         return { items => [] };
+    }
+
+    sub get_configmaps {
+        my ($self, %args) = @_;
+        return {
+            items => [
+                { metadata => { name => 'app-config', namespace => $args{namespace}, creationTimestamp => '2024-01-15T10:00:00Z' },
+                  data => { 'key1' => 'val1', 'key2' => 'val2' } },
+            ],
+        };
     }
 }
 

@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 8;
+use Test::More tests => 12;
 use lib 'lib';
 
 use_ok('pk9s::Resource');
@@ -44,3 +44,23 @@ my $raw_deploy = {
 my $deploy = pk9s::Resource->normalize($raw_deploy, 'deployment');
 is($deploy->name, 'nginx-deploy', 'deployment name');
 is($deploy->ready, '2/3', 'deployment ready count');
+
+# Test configmap normalization
+my $raw_cm = {
+    metadata => {
+        name => 'app-config',
+        namespace => 'default',
+        creationTimestamp => '2024-01-15T10:30:00Z',
+    },
+    data => {
+        'database_url' => 'postgres://localhost/db',
+        'api_key' => 'secret123',
+        'log_level' => 'info',
+    },
+};
+
+my $cm = pk9s::Resource->normalize($raw_cm, 'configmap');
+is($cm->name, 'app-config', 'configmap name');
+is($cm->namespace, 'default', 'configmap namespace');
+is($cm->status, 'Active', 'configmap status');
+is($cm->ready, '3 keys', 'configmap keys count');

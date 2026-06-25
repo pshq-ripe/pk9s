@@ -59,6 +59,14 @@ sub normalize {
         $args{status}    = 'Active';
         $args{ready}     = '-';
     }
+    elsif ($type eq 'configmap') {
+        $args{name}      = $raw->{metadata}{name} // '';
+        $args{namespace} = $raw->{metadata}{namespace} // 'default';
+        $args{status}    = 'Active';
+        $args{age}       = $class->_calc_age($raw->{metadata}{creationTimestamp});
+        my $keys = scalar keys %{$raw->{data} // {}};
+        $args{ready}     = "$keys keys";
+    }
     
     return $class->new(%args);
 }

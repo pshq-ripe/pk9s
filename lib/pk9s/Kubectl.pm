@@ -62,6 +62,13 @@ sub get_nodes {
     return $self->execute(@cmd);
 }
 
+sub get_configmaps {
+    my ($self, %args) = @_;
+    my @cmd = ('get', 'configmaps', '--output=json');
+    push @cmd, '--namespace', $args{namespace} if $args{namespace};
+    return $self->execute(@cmd);
+}
+
 sub _run {
     my ($self, @cmd) = @_;
     
