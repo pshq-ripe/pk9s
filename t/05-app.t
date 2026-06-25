@@ -15,7 +15,7 @@ isa_ok($app, 'pk9s::App');
 
 can_ok($app, qw(run _refresh_data _render_table _render_help _switch_view _render_search));
 
-is($app->{_current_view}, 0, 'default view is pods');
+is($app->{_current_view}, 0, 'default view is namespaces');
 is($app->{_selected_row}, 0, 'default selection is first row');
 
 is(pk9s::App::colorize_status('Running'), "\e[32mRunning\e[0m", 'colorize Running');
@@ -25,9 +25,9 @@ is(pk9s::App::colorize_status('Succeeded'), "\e[34mSucceeded\e[0m", 'colorize Su
 is(pk9s::App::colorize_status('Unknown'), "\e[37mUnknown\e[0m", 'colorize Unknown');
 
 my @views = pk9s::App::views();
-is(scalar @views, 5, 'has 5 views');
-is($views[0]{name}, 'pods', 'first view is pods');
-is($views[4]{name}, 'configmaps', 'fifth view is configmaps');
+is(scalar @views, 24, 'has 24 views');
+is($views[0]{name}, 'namespaces', 'first view is namespaces');
+is($views[23]{name}, 'nodes', 'last view is nodes');
 
 # Test _clamp_selection
 $app->{_resources} = [1, 2, 3, 4, 5];
@@ -191,52 +191,54 @@ is(scalar @{$app5->{_resources}}, 3, 'full resources has all 3 items');
 
 # Mock kubectl that returns different resources per view method
 package MockMultiViewKubectl {
+    my $ts = '2024-01-15T10:00:00Z';
+    sub _m { { metadata => { name => $_[0], namespace => $_[1], creationTimestamp => $ts } } }
+
+    sub get_namespaces  { return { items => [{ metadata => { name => 'default', creationTimestamp => $ts }, status => { phase => 'Active' } }] } }
     sub get_pods {
         my ($self, %args) = @_;
-        return {
-            items => [
-                { metadata => { name => 'nginx-pod', namespace => $args{namespace}, creationTimestamp => '2024-01-15T10:00:00Z' },
-                  status => { phase => 'Running', containerStatuses => [{ ready => 1 }] } },
-                { metadata => { name => 'redis-pod', namespace => $args{namespace}, creationTimestamp => '2024-01-15T10:00:00Z' },
-                  status => { phase => 'Running', containerStatuses => [{ ready => 1 }] } },
-            ],
-        };
+        return { items => [
+            { metadata => { name => 'nginx-pod', namespace => $args{namespace}, creationTimestamp => $ts }, status => { phase => 'Running', containerStatuses => [{ ready => 1 }] } },
+            { metadata => { name => 'redis-pod', namespace => $args{namespace}, creationTimestamp => $ts }, status => { phase => 'Running', containerStatuses => [{ ready => 1 }] } },
+        ] };
     }
-
     sub get_deployments {
         my ($self, %args) = @_;
-        return {
-            items => [
-                { metadata => { name => 'nginx-deploy', namespace => $args{namespace}, creationTimestamp => '2024-01-15T10:00:00Z' },
-                  status => { replicas => 2, readyReplicas => 2, updatedReplicas => 2, availableReplicas => 2 } },
-            ],
-        };
+        return { items => [
+            { metadata => { name => 'nginx-deploy', namespace => $args{namespace}, creationTimestamp => $ts }, spec => { replicas => 2 }, status => { replicas => 2, readyReplicas => 2 } },
+        ] };
     }
-
     sub get_services {
         my ($self, %args) = @_;
-        return {
-            items => [
-                { metadata => { name => 'redis-svc', namespace => $args{namespace}, creationTimestamp => '2024-01-15T10:00:00Z' },
-                  spec => { type => 'ClusterIP', clusterIP => '10.0.0.1' } },
-            ],
-        };
+        return { items => [
+            { metadata => { name => 'redis-svc', namespace => $args{namespace}, creationTimestamp => $ts }, spec => { type => 'ClusterIP' } },
+        ] };
     }
-
-    sub get_nodes {
-        my ($self, %args) = @_;
-        return { items => [] };
-    }
-
     sub get_configmaps {
         my ($self, %args) = @_;
-        return {
-            items => [
-                { metadata => { name => 'app-config', namespace => $args{namespace}, creationTimestamp => '2024-01-15T10:00:00Z' },
-                  data => { 'key1' => 'val1', 'key2' => 'val2' } },
-            ],
-        };
+        return { items => [
+            { metadata => { name => 'app-config', namespace => $args{namespace}, creationTimestamp => $ts }, data => { key1 => 'val1', key2 => 'val2' } },
+        ] };
     }
+    sub get_secrets                { my ($s, %a) = @_; return { items => [{ metadata => { name => 'my-secret', namespace => $a{namespace}, creationTimestamp => $ts }, type => 'Opaque', data => { d => 'cGFzc3dvcmQ=' } }] } }
+    sub get_serviceaccounts        { my ($s, %a) = @_; return { items => [{ metadata => { name => 'default', namespace => $a{namespace}, creationTimestamp => $ts }, secrets => [] }] } }
+    sub get_statefulsets           { my ($s, %a) = @_; return { items => [{ metadata => { name => 'web', namespace => $a{namespace}, creationTimestamp => $ts }, spec => { replicas => 1 }, status => { readyReplicas => 1 } }] } }
+    sub get_daemonsets             { my ($s, %a) = @_; return { items => [{ metadata => { name => 'logger', namespace => $a{namespace}, creationTimestamp => $ts }, status => { desiredNumberScheduled => 3, numberReady => 3 } }] } }
+    sub get_replicasets            { my ($s, %a) = @_; return { items => [{ metadata => { name => 'nginx-rs', namespace => $a{namespace}, creationTimestamp => $ts }, spec => { replicas => 1 }, status => { readyReplicas => 1 } }] } }
+    sub get_jobs                   { my ($s, %a) = @_; return { items => [{ metadata => { name => 'migrate', namespace => $a{namespace}, creationTimestamp => $ts }, status => { succeeded => 1 } }] } }
+    sub get_cronjobs               { my ($s, %a) = @_; return { items => [{ metadata => { name => 'backup', namespace => $a{namespace}, creationTimestamp => $ts }, spec => { suspend => 0 } }] } }
+    sub get_ingresses              { my ($s, %a) = @_; return { items => [{ metadata => { name => 'web-ing', namespace => $a{namespace}, creationTimestamp => $ts }, spec => { rules => [{ host => 'example.com' }] } }] } }
+    sub get_networkpolicies        { my ($s, %a) = @_; return { items => [{ metadata => { name => 'allow-web', namespace => $a{namespace}, creationTimestamp => $ts }, spec => { podSelector => { matchLabels => { app => 'web' } } } }] } }
+    sub get_resourcequotas         { my ($s, %a) = @_; return { items => [{ metadata => { name => 'compute', namespace => $a{namespace}, creationTimestamp => $ts }, spec => { hard => { pods => '10' } } }] } }
+    sub get_limitranges            { my ($s, %a) = @_; return { items => [{ metadata => { name => 'limits', namespace => $a{namespace}, creationTimestamp => $ts }, spec => { limits => [{ type => 'Container', default => { cpu => '100m' } }] } }] } }
+    sub get_persistentvolumeclaims { my ($s, %a) = @_; return { items => [{ metadata => { name => 'data-pvc', namespace => $a{namespace}, creationTimestamp => $ts }, status => { phase => 'Bound' }, spec => { resources => { requests => { storage => '10Gi' } } } }] } }
+    sub get_persistentvolumes      { my ($s, %a) = @_; return { items => [{ metadata => { name => 'pv-001', creationTimestamp => $ts }, status => { phase => 'Bound' }, spec => { capacity => { storage => '100Gi' } } }] } }
+    sub get_storageclasses         { my ($s, %a) = @_; return { items => [{ metadata => { name => 'standard', creationTimestamp => $ts }, provisioner => 'kubernetes.io/gce-pd' }] } }
+    sub get_roles                  { my ($s, %a) = @_; return { items => [{ metadata => { name => 'pod-reader', namespace => $a{namespace}, creationTimestamp => $ts }, rules => [{ resources => ['pods'], verbs => ['get','list'] }] }] } }
+    sub get_clusterroles           { my ($s, %a) = @_; return { items => [{ metadata => { name => 'admin', creationTimestamp => $ts }, rules => [{ resources => ['*'], verbs => ['*'] }] }] } }
+    sub get_rolebindings           { my ($s, %a) = @_; return { items => [{ metadata => { name => 'read-pods', namespace => $a{namespace}, creationTimestamp => $ts }, subjects => [{ kind => 'User', name => 'dev' }] }] } }
+    sub get_clusterrolebindings    { my ($s, %a) = @_; return { items => [{ metadata => { name => 'admin-binding', creationTimestamp => $ts }, subjects => [{ kind => 'User', name => 'admin' }] }] } }
+    sub get_nodes                  { my ($s, %a) = @_; return { items => [{ metadata => { name => 'node1', creationTimestamp => $ts }, status => { conditions => [{ type => 'Ready', status => 'True' }] } }] } }
 }
 
 package main;
@@ -247,10 +249,10 @@ my $app6 = pk9s::App->new(
     kubectl => $mock_multi,
 );
 
-# Test: cross-view search for "redis" should find it in pods first
+# Test: cross-view search for "redis" should find it in pods first (pods=1, services=2)
 $app6->{_search_query} = 'all:redis';
 $app6->_apply_search();
-is($app6->{_current_view}, 0, 'cross-view search switches to pods view for redis');
+is($app6->{_current_view}, 1, 'cross-view search switches to pods view for redis');
 is(scalar @{$app6->{_filtered_resources}}, 1, 'cross-view filters to matching resources');
 is($app6->{_filtered_resources}[0]->name, 'redis-pod', 'cross-view finds redis-pod');
 
@@ -258,7 +260,7 @@ is($app6->{_filtered_resources}[0]->name, 'redis-pod', 'cross-view finds redis-p
 $app6->{_current_view} = 0;
 $app6->{_search_query} = 'all:nginx';
 $app6->_apply_search();
-is($app6->{_current_view}, 0, 'cross-view search finds nginx in pods view');
+is($app6->{_current_view}, 1, 'cross-view search finds nginx in pods view');
 is(scalar @{$app6->{_filtered_resources}}, 1, 'cross-view finds nginx-pod in pods view');
 
 # Test: cross-view search for "svc" should switch to services view

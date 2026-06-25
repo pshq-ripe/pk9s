@@ -5,83 +5,37 @@ use warnings;
 use Term::ANSIColor;
 
 my @VIEWS = (
-    {
-        name => 'pods',
-        label => 'Pods',
-        method => 'get_pods',
-        columns => ['NAME', 'STATUS', 'READY', 'AGE'],
-        extract => sub {
-            my ($resource) = @_;
-            return [
-                $resource->name,
-                $resource->status,
-                $resource->ready,
-                $resource->age,
-            ];
-        },
-    },
-    {
-        name => 'deployments',
-        label => 'Deployments',
-        method => 'get_deployments',
-        columns => ['NAME', 'READY', 'UP-TO-DATE', 'AVAILABLE', 'AGE'],
-        extract => sub {
-            my ($resource) = @_;
-            return [
-                $resource->name,
-                $resource->ready,
-                '-',
-                '-',
-                $resource->age,
-            ];
-        },
-    },
-    {
-        name => 'services',
-        label => 'Services',
-        method => 'get_services',
-        columns => ['NAME', 'TYPE', 'CLUSTER-IP', 'EXTERNAL-PORT', 'AGE'],
-        extract => sub {
-            my ($resource) = @_;
-            return [
-                $resource->name,
-                '-',
-                '-',
-                '-',
-                $resource->age,
-            ];
-        },
-    },
-    {
-        name => 'nodes',
-        label => 'Nodes',
-        method => 'get_nodes',
-        columns => ['NAME', 'STATUS', 'ROLES', 'AGE', 'VERSION'],
-        extract => sub {
-            my ($resource) = @_;
-            return [
-                $resource->name,
-                $resource->status,
-                '-',
-                $resource->age,
-                '-',
-            ];
-        },
-    },
-    {
-        name => 'configmaps',
-        label => 'ConfigMaps',
-        method => 'get_configmaps',
-        columns => ['NAME', 'KEYS', 'AGE'],
-        extract => sub {
-            my ($resource) = @_;
-            return [
-                $resource->name,
-                $resource->ready,
-                $resource->age,
-            ];
-        },
-    },
+    # Core
+    { name => 'namespaces',        label => 'Namespaces',         method => 'get_namespaces',             columns => ['NAME', 'STATUS', 'AGE'],                extract => sub { [ $_[0]->name, $_[0]->status, $_[0]->age ] } },
+    { name => 'pods',              label => 'Pods',               method => 'get_pods',                   columns => ['NAME', 'STATUS', 'READY', 'AGE'],        extract => sub { [ $_[0]->name, $_[0]->status, $_[0]->ready, $_[0]->age ] } },
+    { name => 'services',          label => 'Services',           method => 'get_services',               columns => ['NAME', 'TYPE', 'READY', 'AGE'],          extract => sub { [ $_[0]->name, $_[0]->status, $_[0]->ready, $_[0]->age ] } },
+    { name => 'configmaps',        label => 'ConfigMaps',         method => 'get_configmaps',             columns => ['NAME', 'KEYS', 'AGE'],                   extract => sub { [ $_[0]->name, $_[0]->ready, $_[0]->age ] } },
+    { name => 'secrets',           label => 'Secrets',            method => 'get_secrets',                columns => ['NAME', 'TYPE', 'KEYS', 'AGE'],           extract => sub { [ $_[0]->name, $_[0]->status, $_[0]->ready, $_[0]->age ] } },
+    { name => 'serviceaccounts',   label => 'ServiceAccounts',    method => 'get_serviceaccounts',        columns => ['NAME', 'SECRETS', 'AGE'],                extract => sub { [ $_[0]->name, $_[0]->ready, $_[0]->age ] } },
+    # Workloads
+    { name => 'deployments',       label => 'Deployments',        method => 'get_deployments',            columns => ['NAME', 'READY', 'STATUS', 'AGE'],        extract => sub { [ $_[0]->name, $_[0]->ready, $_[0]->status, $_[0]->age ] } },
+    { name => 'statefulsets',      label => 'StatefulSets',       method => 'get_statefulsets',           columns => ['NAME', 'READY', 'STATUS', 'AGE'],        extract => sub { [ $_[0]->name, $_[0]->ready, $_[0]->status, $_[0]->age ] } },
+    { name => 'daemonsets',        label => 'DaemonSets',         method => 'get_daemonsets',             columns => ['NAME', 'READY', 'STATUS', 'AGE'],        extract => sub { [ $_[0]->name, $_[0]->ready, $_[0]->status, $_[0]->age ] } },
+    { name => 'replicasets',       label => 'ReplicaSets',        method => 'get_replicasets',            columns => ['NAME', 'READY', 'STATUS', 'AGE'],        extract => sub { [ $_[0]->name, $_[0]->ready, $_[0]->status, $_[0]->age ] } },
+    { name => 'jobs',              label => 'Jobs',               method => 'get_jobs',                   columns => ['NAME', 'STATUS', 'READY', 'AGE'],        extract => sub { [ $_[0]->name, $_[0]->status, $_[0]->ready, $_[0]->age ] } },
+    { name => 'cronjobs',          label => 'CronJobs',           method => 'get_cronjobs',               columns => ['NAME', 'STATUS', 'SCHEDULE', 'AGE'],     extract => sub { [ $_[0]->name, $_[0]->status, $_[0]->ready, $_[0]->age ] } },
+    # Networking
+    { name => 'ingresses',         label => 'Ingresses',          method => 'get_ingresses',              columns => ['NAME', 'HOST', 'STATUS', 'AGE'],         extract => sub { [ $_[0]->name, $_[0]->ready, $_[0]->status, $_[0]->age ] } },
+    { name => 'networkpolicies',   label => 'NetworkPolicies',    method => 'get_networkpolicies',        columns => ['NAME', 'PODS', 'STATUS', 'AGE'],         extract => sub { [ $_[0]->name, $_[0]->ready, $_[0]->status, $_[0]->age ] } },
+    # Config
+    { name => 'resourcequotas',    label => 'ResourceQuotas',     method => 'get_resourcequotas',         columns => ['NAME', 'QUOTAS', 'STATUS', 'AGE'],       extract => sub { [ $_[0]->name, $_[0]->ready, $_[0]->status, $_[0]->age ] } },
+    { name => 'limitranges',       label => 'LimitRanges',        method => 'get_limitranges',            columns => ['NAME', 'LIMITS', 'STATUS', 'AGE'],       extract => sub { [ $_[0]->name, $_[0]->ready, $_[0]->status, $_[0]->age ] } },
+    # Storage
+    { name => 'persistentvolumeclaims', label => 'PVCs',           method => 'get_persistentvolumeclaims', columns => ['NAME', 'STATUS', 'CAPACITY', 'AGE'],    extract => sub { [ $_[0]->name, $_[0]->status, $_[0]->ready, $_[0]->age ] } },
+    { name => 'persistentvolumes',      label => 'PVs',            method => 'get_persistentvolumes',      columns => ['NAME', 'STATUS', 'CAPACITY', 'AGE'],    extract => sub { [ $_[0]->name, $_[0]->status, $_[0]->ready, $_[0]->age ] } },
+    { name => 'storageclasses',         label => 'StorageClasses',  method => 'get_storageclasses',         columns => ['NAME', 'PROVISIONER', 'STATUS', 'AGE'], extract => sub { [ $_[0]->name, $_[0]->ready, $_[0]->status, $_[0]->age ] } },
+    # RBAC
+    { name => 'roles',                 label => 'Roles',            method => 'get_roles',                  columns => ['NAME', 'RULES', 'STATUS', 'AGE'],       extract => sub { [ $_[0]->name, $_[0]->ready, $_[0]->status, $_[0]->age ] } },
+    { name => 'clusterroles',          label => 'ClusterRoles',     method => 'get_clusterroles',           columns => ['NAME', 'RULES', 'STATUS', 'AGE'],       extract => sub { [ $_[0]->name, $_[0]->ready, $_[0]->status, $_[0]->age ] } },
+    { name => 'rolebindings',          label => 'RoleBindings',     method => 'get_rolebindings',           columns => ['NAME', 'SUBJECTS', 'STATUS', 'AGE'],    extract => sub { [ $_[0]->name, $_[0]->ready, $_[0]->status, $_[0]->age ] } },
+    { name => 'clusterrolebindings',   label => 'ClusterRoleBindings', method => 'get_clusterrolebindings', columns => ['NAME', 'SUBJECTS', 'STATUS', 'AGE'],    extract => sub { [ $_[0]->name, $_[0]->ready, $_[0]->status, $_[0]->age ] } },
+    # Nodes
+    { name => 'nodes',                label => 'Nodes',             method => 'get_nodes',                  columns => ['NAME', 'STATUS', 'VERSION', 'AGE'],     extract => sub { [ $_[0]->name, $_[0]->status, $_[0]->ready, $_[0]->age ] } },
 );
 
 my %STATUS_COLORS = (

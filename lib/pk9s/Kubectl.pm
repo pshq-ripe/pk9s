@@ -35,39 +35,37 @@ sub execute {
     return $data;
 }
 
-sub get_pods {
-    my ($self, %args) = @_;
-    my @cmd = ('get', 'pods', '--output=json');
+sub _get {
+    my ($self, $resource, %args) = @_;
+    my @cmd = ('get', $resource, '--output=json');
     push @cmd, '--namespace', $args{namespace} if $args{namespace};
     return $self->execute(@cmd);
 }
 
-sub get_deployments {
-    my ($self, %args) = @_;
-    my @cmd = ('get', 'deployments', '--output=json');
-    push @cmd, '--namespace', $args{namespace} if $args{namespace};
-    return $self->execute(@cmd);
-}
-
-sub get_services {
-    my ($self, %args) = @_;
-    my @cmd = ('get', 'services', '--output=json');
-    push @cmd, '--namespace', $args{namespace} if $args{namespace};
-    return $self->execute(@cmd);
-}
-
-sub get_nodes {
-    my ($self, %args) = @_;
-    my @cmd = ('get', 'nodes', '--output=json');
-    return $self->execute(@cmd);
-}
-
-sub get_configmaps {
-    my ($self, %args) = @_;
-    my @cmd = ('get', 'configmaps', '--output=json');
-    push @cmd, '--namespace', $args{namespace} if $args{namespace};
-    return $self->execute(@cmd);
-}
+sub get_pods                    { $_[0]->_get('pods', @_[1..$#_]) }
+sub get_deployments             { $_[0]->_get('deployments', @_[1..$#_]) }
+sub get_services                { $_[0]->_get('services', @_[1..$#_]) }
+sub get_configmaps              { $_[0]->_get('configmaps', @_[1..$#_]) }
+sub get_secrets                 { $_[0]->_get('secrets', @_[1..$#_]) }
+sub get_persistentvolumeclaims  { $_[0]->_get('persistentvolumeclaims', @_[1..$#_]) }
+sub get_serviceaccounts         { $_[0]->_get('serviceaccounts', @_[1..$#_]) }
+sub get_namespaces              { $_[0]->_get('namespaces') }
+sub get_nodes                   { $_[0]->_get('nodes') }
+sub get_persistentvolumes       { $_[0]->_get('persistentvolumes') }
+sub get_statefulsets            { $_[0]->_get('statefulsets', @_[1..$#_]) }
+sub get_daemonsets              { $_[0]->_get('daemonsets', @_[1..$#_]) }
+sub get_replicasets             { $_[0]->_get('replicasets', @_[1..$#_]) }
+sub get_jobs                    { $_[0]->_get('jobs', @_[1..$#_]) }
+sub get_cronjobs                { $_[0]->_get('cronjobs', @_[1..$#_]) }
+sub get_ingresses               { $_[0]->_get('ingresses', @_[1..$#_]) }
+sub get_networkpolicies         { $_[0]->_get('networkpolicies', @_[1..$#_]) }
+sub get_resourcequotas          { $_[0]->_get('resourcequotas', @_[1..$#_]) }
+sub get_limitranges             { $_[0]->_get('limitranges', @_[1..$#_]) }
+sub get_roles                   { $_[0]->_get('roles', @_[1..$#_]) }
+sub get_clusterroles            { $_[0]->_get('clusterroles') }
+sub get_rolebindings            { $_[0]->_get('rolebindings', @_[1..$#_]) }
+sub get_clusterrolebindings     { $_[0]->_get('clusterrolebindings') }
+sub get_storageclasses          { $_[0]->_get('storageclasses') }
 
 sub _run {
     my ($self, @cmd) = @_;

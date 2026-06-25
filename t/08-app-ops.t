@@ -5,13 +5,15 @@ use Test::More;
 use lib 'lib';
 
 package MockKubectl {
+    my $ts = '2024-01-15T10:00:00Z';
     sub new { bless { kubectl => 'echo' }, shift }
+    sub get_namespaces { return { items => [{ metadata => { name => 'default', creationTimestamp => $ts }, status => { phase => 'Active' } }] } }
     sub get_pods {
         my ($self, %args) = @_;
         return {
             items => [
                 {
-                    metadata => { name => 'nginx', namespace => 'default' },
+                    metadata => { name => 'nginx', namespace => 'default', creationTimestamp => $ts },
                     status => { phase => 'Running', containerStatuses => [{ ready => \1 }] },
                 },
             ],
@@ -19,7 +21,26 @@ package MockKubectl {
     }
     sub get_deployments { return { items => [] } }
     sub get_services { return { items => [] } }
+    sub get_configmaps { return { items => [] } }
+    sub get_secrets { return { items => [] } }
+    sub get_serviceaccounts { return { items => [] } }
     sub get_nodes { return { items => [] } }
+    sub get_persistentvolumeclaims { return { items => [] } }
+    sub get_persistentvolumes { return { items => [] } }
+    sub get_statefulsets { return { items => [] } }
+    sub get_daemonsets { return { items => [] } }
+    sub get_replicasets { return { items => [] } }
+    sub get_jobs { return { items => [] } }
+    sub get_cronjobs { return { items => [] } }
+    sub get_ingresses { return { items => [] } }
+    sub get_networkpolicies { return { items => [] } }
+    sub get_resourcequotas { return { items => [] } }
+    sub get_limitranges { return { items => [] } }
+    sub get_roles { return { items => [] } }
+    sub get_clusterroles { return { items => [] } }
+    sub get_rolebindings { return { items => [] } }
+    sub get_clusterrolebindings { return { items => [] } }
+    sub get_storageclasses { return { items => [] } }
     sub _run {
         my ($self, @cmd) = @_;
         if (grep { $_ eq 'pods' } @cmd) {
@@ -137,7 +158,7 @@ subtest 'view_logs sets log view' => sub {
             status => 'Running',
         ),
     ];
-    $app->{_current_view} = 0;
+    $app->{_current_view} = 1;
     $app->{_selected_row} = 0;
 
     $app->_view_logs();

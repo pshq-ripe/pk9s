@@ -34,6 +34,9 @@ my $raw_deploy = {
         name => 'nginx-deploy',
         namespace => 'default',
     },
+    spec => {
+        replicas => 3,
+    },
     status => {
         replicas => 3,
         readyReplicas => 2,
