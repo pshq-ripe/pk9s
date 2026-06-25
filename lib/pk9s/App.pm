@@ -2,6 +2,7 @@ package pk9s::App;
 use strict;
 use warnings;
 
+use pk9s::Resource;
 use Term::ANSIColor;
 
 my @VIEWS = (
@@ -230,23 +231,6 @@ sub _setup_timer {
             },
         );
     };
-    if ($@) {
-        $self->{_timer_pid} = fork();
-        if ($self->{_timer_pid} == 0) {
-            while (1) {
-                sleep $self->{_refresh_interval};
-                kill 'USR1', getppid();
-            }
-        }
-        $self->{_tickit}->term->set_utf8(1);
-        eval {
-            require POSIX;
-            POSIX::sigaction(
-                POSIX::SIGUSR1(),
-                POSIX::SigAction->new(sub { $self->_refresh_data() }),
-            );
-        };
-    }
 }
 
 sub _refresh_data {
