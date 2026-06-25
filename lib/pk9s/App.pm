@@ -100,6 +100,12 @@ sub new {
         _log_lines => [],
         _log_scroll => 0,
         _confirm_action => undef,
+        _context => undef,
+        _ai => undef,
+        _plugins => undef,
+        _ai_view => 0,
+        _ai_response => '',
+        _ai_scroll => 0,
     };
     return bless $self, $class;
 }
@@ -112,8 +118,29 @@ sub run {
     $self->_build_ui();
     $self->_setup_keybindings();
     $self->_setup_timer();
+    $self->_init_context();
+    $self->_init_plugins();
     $self->_refresh_data();
     $self->{_tickit}->run;
+}
+
+sub _init_context {
+    my ($self) = @_;
+    require pk9s::Context;
+    $self->{_context} = pk9s::Context->new();
+
+    require pk9s::AI;
+    $self->{_ai} = pk9s::AI->new(
+        context => $self->{_context},
+        kubectl => $self->{kubectl},
+    );
+}
+
+sub _init_plugins {
+    my ($self) = @_;
+    require pk9s::Plugin;
+    $self->{_plugins} = pk9s::Plugin->new();
+    $self->{_plugins}->load_plugins();
 }
 
 sub _build_ui {
@@ -181,6 +208,9 @@ sub _setup_keybindings {
         'R'     => sub { $self->_rollout_restart() },
         'd'     => sub { $self->_delete_resource() },
         'l'     => sub { $self->_view_logs() },
+        'a'     => sub { $self->_analyze_resource() },
+        'A'     => sub { $self->_analyze_cluster() },
+        'p'     => sub { $self->_list_plugins() },
     );
 
     $term->cb_keypress(sub {
@@ -206,6 +236,25 @@ sub _setup_keybindings {
             }
             if ($str eq 'q' || $str eq 'Escape') {
                 $self->{_log_view} = 0;
+                $self->_render_table();
+                return;
+            }
+            return;
+        }
+
+        if ($self->{_ai_view}) {
+            if ($str eq 'j' || $str eq 'Down') {
+                $self->{_ai_scroll}++ if $self->{_ai_scroll} < scalar @{$self->{_ai_lines}} - 1;
+                $self->_render_ai();
+                return;
+            }
+            if ($str eq 'k' || $str eq 'Up') {
+                $self->{_ai_scroll}-- if $self->{_ai_scroll} > 0;
+                $self->_render_ai();
+                return;
+            }
+            if ($str eq 'q' || $str eq 'Escape') {
+                $self->{_ai_view} = 0;
                 $self->_render_table();
                 return;
             }
@@ -416,6 +465,9 @@ sub _render_help {
         '  F          List port-forwards',
         '  R          Rollout restart',
         '  l          View logs',
+        '  a          AI analyze resource',
+        '  A          AI analyze cluster',
+        '  p          List plugins',
         '  ?          Toggle this help',
         '  q          Quit',
         '',
@@ -728,6 +780,118 @@ sub _render_logs {
     my $footer = sprintf("j/k: scroll  q/Escape: close  [%d-%d/%d]",
         $start + 1, $end + 1, scalar @{$self->{_log_lines}});
     $win->printAt($win->lines - 1, 0, $footer, 0);
+}
+
+sub _analyze_resource {
+    my ($self) = @_;
+    return unless $self->{_resources} && @{$self->{_resources}};
+    return unless $self->{_ai};
+
+    my $view = $VIEWS[$self->{_current_view}];
+    my $type = $view->{name};
+    $type =~ s/s$//;
+    my $res = $self->{_resources}[$self->{_selected_row}];
+    return unless $res;
+
+    my $result = $self->{_ai}->analyze_resource($type, $res->name, $self->{config}->get('namespace'));
+
+    if ($result->{response}) {
+        $self->{_ai_view} = 1;
+        $self->{_ai_lines} = [split(/\n/, $result->{response})];
+        $self->{_ai_scroll} = 0;
+        $self->_render_ai();
+    } elsif ($result->{error}) {
+        $self->{_ai_view} = 1;
+        $self->{_ai_lines} = ["Error: $result->{error}", "", "Make sure Ollama is running:", "  ollama serve", "  ollama pull qwen2.5:7b"];
+        $self->{_ai_scroll} = 0;
+        $self->_render_ai();
+    }
+}
+
+sub _analyze_cluster {
+    my ($self) = @_;
+    return unless $self->{_ai};
+
+    my $result = $self->{_ai}->analyze_cluster();
+
+    if ($result->{response}) {
+        $self->{_ai_view} = 1;
+        $self->{_ai_lines} = [split(/\n/, $result->{response})];
+        $self->{_ai_scroll} = 0;
+        $self->_render_ai();
+    } elsif ($result->{error}) {
+        $self->{_ai_view} = 1;
+        $self->{_ai_lines} = ["Error: $result->{error}", "", "Make sure Ollama is running:", "  ollama serve", "  ollama pull qwen2.5:7b"];
+        $self->{_ai_scroll} = 0;
+        $self->_render_ai();
+    }
+}
+
+sub _render_ai {
+    my ($self) = @_;
+    my $win = $self->{_root_window};
+    return unless $win;
+    return unless $self->{_ai_view};
+
+    for my $i (0..$win->lines - 1) {
+        $win->eraseAt($i, 0, $win->cols);
+    }
+
+    my $max_lines = $win->lines - 2;
+    my $start = $self->{_ai_scroll};
+    my $end = $start + $max_lines;
+    $end = scalar @{$self->{_ai_lines}} - 1 if $end >= scalar @{$self->{_ai_lines}};
+
+    my $row = 0;
+    for my $i ($start..$end) {
+        my $line = $self->{_ai_lines}[$i] // '';
+        $win->printAt($row, 0, substr($line, 0, $win->cols), 0);
+        $row++;
+    }
+
+    my $footer = sprintf("j/k: scroll  q/Escape: close  [%d-%d/%d]",
+        $start + 1, $end + 1, scalar @{$self->{_ai_lines}});
+    $win->printAt($win->lines - 1, 0, $footer, 0);
+}
+
+sub _list_plugins {
+    my ($self) = @_;
+    return unless $self->{_plugins};
+
+    my @plugins = $self->{_plugins}->get_plugins();
+
+    if (!@plugins) {
+        $self->{_ai_view} = 1;
+        $self->{_ai_lines} = [
+            "No plugins loaded.",
+            "",
+            "To install plugins, create JSON files in:",
+            "  ~/.pk9s/plugins/",
+            "",
+            "Example plugin format:",
+            '{',
+            '  "name": "fluxcd",',
+            '  "version": "1.0.0",',
+            '  "resources": [...],',
+            '  "actions": {...}',
+            '}',
+        ];
+        $self->{_ai_scroll} = 0;
+        $self->_render_ai();
+        return;
+    }
+
+    my @lines = ("Loaded Plugins:", "");
+    for my $plugin (@plugins) {
+        push @lines, "  $plugin->{name} v$plugin->{version}";
+        push @lines, "    $plugin->{description}" if $plugin->{description};
+        push @lines, "";
+    }
+
+    $self->{_ai_view} = 1;
+    $self->{_ai_lines} = \@lines;
+    $self->{_ai_scroll} = 0;
+    $self->_render_ai();
 }
 
 sub colorize_status {
