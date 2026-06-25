@@ -95,6 +95,11 @@ sub new {
         _search_query => '',
         _search_regex => undef,
         _filtered_resources => [],
+        _portforwards => {},
+        _log_view => 0,
+        _log_lines => [],
+        _log_scroll => 0,
+        _confirm_action => undef,
     };
     return bless $self, $class;
 }
@@ -133,8 +138,22 @@ sub _setup_keybindings {
         'BTab'  => sub { $self->_switch_view(-1); $self->_refresh_data(); },
         'r'     => sub { $self->_refresh_data() },
         '?'     => sub { $self->{_show_help} = 1; $self->_render_help(); },
-        'q'     => sub { $self->{_tickit}->stop },
-        'C-c'   => sub { $self->{_tickit}->stop },
+        'q'     => sub {
+            require pk9s::Ops;
+            my $ops = pk9s::Ops->new(kubectl => $self->{kubectl});
+            for my $pid (keys %{$self->{_portforwards}}) {
+                $ops->kill_portforward($pid);
+            }
+            $self->{_tickit}->stop;
+        },
+        'C-c'   => sub {
+            require pk9s::Ops;
+            my $ops = pk9s::Ops->new(kubectl => $self->{kubectl});
+            for my $pid (keys %{$self->{_portforwards}}) {
+                $ops->kill_portforward($pid);
+            }
+            $self->{_tickit}->stop;
+        },
         '/'     => sub {
             $self->{_search_active} = 1;
             $self->{_search_query} = '';
@@ -156,6 +175,12 @@ sub _setup_keybindings {
             $self->{_filtered_resources} = $self->{_resources};
             $self->_render_search() if $self->{_search_active};
         },
+        'e'     => sub { $self->_edit_resource() },
+        'f'     => sub { $self->_port_forward() },
+        'F'     => sub { $self->_list_portforwards() },
+        'R'     => sub { $self->_rollout_restart() },
+        'd'     => sub { $self->_delete_resource() },
+        'l'     => sub { $self->_view_logs() },
     );
 
     $term->cb_keypress(sub {
@@ -165,6 +190,30 @@ sub _setup_keybindings {
         if ($self->{_show_help}) {
             $self->{_show_help} = 0;
             $self->_render_table();
+            return;
+        }
+
+        if ($self->{_log_view}) {
+            if ($str eq 'j' || $str eq 'Down') {
+                $self->{_log_scroll}++ if $self->{_log_scroll} < scalar @{$self->{_log_lines}} - 1;
+                $self->_render_logs();
+                return;
+            }
+            if ($str eq 'k' || $str eq 'Up') {
+                $self->{_log_scroll}-- if $self->{_log_scroll} > 0;
+                $self->_render_logs();
+                return;
+            }
+            if ($str eq 'q' || $str eq 'Escape') {
+                $self->{_log_view} = 0;
+                $self->_render_table();
+                return;
+            }
+            return;
+        }
+
+        if ($self->{_confirm_action}) {
+            $self->_handle_confirm($str);
             return;
         }
 
@@ -360,6 +409,13 @@ sub _render_help {
         '',
         'Actions:',
         '  r          Refresh data',
+        '  /          Search',
+        '  e          Edit resource',
+        '  d          Delete resource',
+        '  f          Port-forward',
+        '  F          List port-forwards',
+        '  R          Rollout restart',
+        '  l          View logs',
         '  ?          Toggle this help',
         '  q          Quit',
         '',
@@ -472,6 +528,206 @@ sub _apply_search {
     
     $self->{_selected_row} = 0;
     $self->_clamp_selection();
+}
+
+sub _edit_resource {
+    my ($self) = @_;
+    return unless $self->{_resources} && @{$self->{_resources}};
+    my $view = $VIEWS[$self->{_current_view}];
+    my $type = $view->{name};
+    $type =~ s/s$//;
+    my $res = $self->{_resources}[$self->{_selected_row}];
+    return unless $res;
+
+    require pk9s::Ops;
+    my $ops = pk9s::Ops->new(kubectl => $self->{kubectl});
+    my $result = $ops->edit_resource($type, $res->name, $self->{config}->get('namespace'));
+
+    if ($result->{success}) {
+        $self->_refresh_data();
+    } elsif ($result->{error}) {
+        $self->{_confirm_action} = { type => 'error', message => $result->{error} };
+        $self->_render_confirm();
+    }
+}
+
+sub _delete_resource {
+    my ($self) = @_;
+    return unless $self->{_resources} && @{$self->{_resources}};
+    my $view = $VIEWS[$self->{_current_view}];
+    my $type = $view->{name};
+    $type =~ s/s$//;
+    my $res = $self->{_resources}[$self->{_selected_row}];
+    return unless $res;
+
+    $self->{_confirm_action} = {
+        type => 'delete',
+        resource_type => $type,
+        resource_name => $res->name,
+        namespace => $self->{config}->get('namespace'),
+    };
+    $self->_render_confirm();
+}
+
+sub _rollout_restart {
+    my ($self) = @_;
+    return unless $self->{_resources} && @{$self->{_resources}};
+    my $view = $VIEWS[$self->{_current_view}];
+    my $type = $view->{name};
+    $type =~ s/s$//;
+    my $res = $self->{_resources}[$self->{_selected_row}];
+    return unless $res;
+
+    $self->{_confirm_action} = {
+        type => 'restart',
+        resource_type => $type,
+        resource_name => $res->name,
+        namespace => $self->{config}->get('namespace'),
+    };
+    $self->_render_confirm();
+}
+
+sub _view_logs {
+    my ($self) = @_;
+    return unless $self->{_resources} && @{$self->{_resources}};
+    my $view = $VIEWS[$self->{_current_view}];
+    return unless $view->{name} eq 'pods';
+    my $res = $self->{_resources}[$self->{_selected_row}];
+    return unless $res;
+
+    require pk9s::Ops;
+    my $ops = pk9s::Ops->new(kubectl => $self->{kubectl});
+    my $result = $ops->get_logs($res->name, $self->{config}->get('namespace'));
+
+    if ($result->{logs}) {
+        $self->{_log_view} = 1;
+        $self->{_log_lines} = [split(/\n/, $result->{logs})];
+        $self->{_log_scroll} = 0;
+        $self->_render_logs();
+    }
+}
+
+sub _port_forward {
+    my ($self) = @_;
+    return unless $self->{_resources} && @{$self->{_resources}};
+    my $view = $VIEWS[$self->{_current_view}];
+    my $type = $view->{name};
+    $type =~ s/s$//;
+    my $res = $self->{_resources}[$self->{_selected_row}];
+    return unless $res;
+
+    require pk9s::Ops;
+    my $ops = pk9s::Ops->new(kubectl => $self->{kubectl});
+    my $result = $ops->port_forward($type, $res->name, $self->{config}->get('namespace'), '8080:80');
+
+    if ($result->{pid}) {
+        $self->{_portforwards}{$result->{pid}} = {
+            cmd => "$type/" . $res->name,
+            port => $result->{ports},
+            start_time => time(),
+        };
+    }
+}
+
+sub _list_portforwards {
+    my ($self) = @_;
+    my @pids = keys %{$self->{_portforwards}};
+    if (!@pids) {
+        $self->{_confirm_action} = { type => 'info', message => 'No active port-forwards' };
+        $self->_render_confirm();
+        return;
+    }
+    my $msg = "Active port-forwards:\n";
+    for my $pid (@pids) {
+        my $pf = $self->{_portforwards}{$pid};
+        $msg .= "  PID $pid: $pf->{cmd} :$pf->{port}\n";
+    }
+    $msg .= "\nPress 'k' to kill all, any other key to close";
+    $self->{_confirm_action} = { type => 'portforwards', message => $msg };
+    $self->_render_confirm();
+}
+
+sub _render_confirm {
+    my ($self) = @_;
+    my $win = $self->{_root_window};
+    return unless $win;
+    return unless $self->{_confirm_action};
+
+    my $action = $self->{_confirm_action};
+    my $msg = $action->{message} // '';
+
+    if ($action->{type} eq 'delete') {
+        $msg = "Delete $action->{resource_type} $action->{resource_name}? (y/N)";
+    } elsif ($action->{type} eq 'restart') {
+        $msg = "Restart rollout for $action->{resource_type} $action->{resource_name}? (y/N)";
+    }
+
+    my $line = $win->lines - 1;
+    $win->printAt($line, 0, sprintf("%-*s", $win->cols, $msg), 0);
+}
+
+sub _handle_confirm {
+    my ($self, $key) = @_;
+    return unless $self->{_confirm_action};
+
+    my $action = $self->{_confirm_action};
+
+    if ($action->{type} eq 'delete' && $key eq 'y') {
+        require pk9s::Ops;
+        my $ops = pk9s::Ops->new(kubectl => $self->{kubectl});
+        $ops->delete_resource($action->{resource_type}, $action->{resource_name}, $action->{namespace});
+        $self->{_confirm_action} = undef;
+        $self->_refresh_data();
+        return;
+    }
+
+    if ($action->{type} eq 'restart' && $key eq 'y') {
+        require pk9s::Ops;
+        my $ops = pk9s::Ops->new(kubectl => $self->{kubectl});
+        $ops->rollout_restart($action->{resource_type}, $action->{resource_name}, $action->{namespace});
+        $self->{_confirm_action} = undef;
+        $self->_refresh_data();
+        return;
+    }
+
+    if ($action->{type} eq 'portforwards' && $key eq 'k') {
+        require pk9s::Ops;
+        my $ops = pk9s::Ops->new(kubectl => $self->{kubectl});
+        for my $pid (keys %{$self->{_portforwards}}) {
+            $ops->kill_portforward($pid);
+            delete $self->{_portforwards}{$pid};
+        }
+    }
+
+    $self->{_confirm_action} = undef;
+    $self->_render_table();
+}
+
+sub _render_logs {
+    my ($self) = @_;
+    my $win = $self->{_root_window};
+    return unless $win;
+    return unless $self->{_log_view};
+
+    for my $i (0..$win->lines - 1) {
+        $win->eraseAt($i, 0, $win->cols);
+    }
+
+    my $max_lines = $win->lines - 2;
+    my $start = $self->{_log_scroll};
+    my $end = $start + $max_lines;
+    $end = scalar @{$self->{_log_lines}} - 1 if $end >= scalar @{$self->{_log_lines}};
+
+    my $row = 0;
+    for my $i ($start..$end) {
+        my $line = $self->{_log_lines}[$i] // '';
+        $win->printAt($row, 0, substr($line, 0, $win->cols), 0);
+        $row++;
+    }
+
+    my $footer = sprintf("j/k: scroll  q/Escape: close  [%d-%d/%d]",
+        $start + 1, $end + 1, scalar @{$self->{_log_lines}});
+    $win->printAt($win->lines - 1, 0, $footer, 0);
 }
 
 sub colorize_status {
