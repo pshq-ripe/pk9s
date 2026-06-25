@@ -74,6 +74,9 @@ sub new {
         _ai_view => 0,
         _ai_response => '',
         _ai_scroll => 0,
+        _metrics_view => 0,
+        _metrics_lines => [],
+        _metrics_scroll => 0,
     };
     return bless $self, $class;
 }
@@ -176,6 +179,8 @@ sub _setup_keybindings {
         'R'     => sub { $self->_rollout_restart() },
         'd'     => sub { $self->_delete_resource() },
         'l'     => sub { $self->_view_logs() },
+        'L'     => sub { $self->_view_logs_full() },
+        'm'     => sub { $self->_view_metrics() },
         'a'     => sub { $self->_analyze_resource() },
         'A'     => sub { $self->_analyze_cluster() },
         'p'     => sub { $self->_list_plugins() },
@@ -204,6 +209,35 @@ sub _setup_keybindings {
             }
             if ($str eq 'q' || $str eq 'Escape') {
                 $self->{_log_view} = 0;
+                $self->_render_table();
+                return;
+            }
+            if ($str eq 'G') {
+                $self->{_log_scroll} = scalar @{$self->{_log_lines}} - 1;
+                $self->_render_logs();
+                return;
+            }
+            if ($str eq 'g') {
+                $self->{_log_scroll} = 0;
+                $self->_render_logs();
+                return;
+            }
+            return;
+        }
+
+        if ($self->{_metrics_view}) {
+            if ($str eq 'j' || $str eq 'Down') {
+                $self->{_metrics_scroll}++ if $self->{_metrics_scroll} < scalar @{$self->{_metrics_lines}} - 1;
+                $self->_render_metrics();
+                return;
+            }
+            if ($str eq 'k' || $str eq 'Up') {
+                $self->{_metrics_scroll}-- if $self->{_metrics_scroll} > 0;
+                $self->_render_metrics();
+                return;
+            }
+            if ($str eq 'q' || $str eq 'Escape') {
+                $self->{_metrics_view} = 0;
                 $self->_render_table();
                 return;
             }
@@ -432,7 +466,9 @@ sub _render_help {
         '  f          Port-forward',
         '  F          List port-forwards',
         '  R          Rollout restart',
-        '  l          View logs',
+        '  l          View logs (last 100)',
+        '  L          Full logs + describe',
+        '  m          Metrics (requests/limits)',
         '  a          AI analyze resource',
         '  A          AI analyze cluster',
         '  p          List plugins',
@@ -615,9 +651,11 @@ sub _view_logs {
     my $res = $self->{_resources}[$self->{_selected_row}];
     return unless $res;
 
-    require pk9s::Ops;
-    my $ops = pk9s::Ops->new(kubectl => $self->{kubectl});
-    my $result = $ops->get_logs($res->name, $self->{config}->get('namespace'));
+    my $result = $self->{kubectl}->get_logs(
+        name => $res->name,
+        namespace => $self->{config}->get('namespace'),
+        tail => 100,
+    );
 
     if ($result->{logs}) {
         $self->{_log_view} = 1;
@@ -625,6 +663,110 @@ sub _view_logs {
         $self->{_log_scroll} = 0;
         $self->_render_logs();
     }
+}
+
+sub _view_logs_full {
+    my ($self) = @_;
+    return unless $self->{_resources} && @{$self->{_resources}};
+    my $view = $VIEWS[$self->{_current_view}];
+    return unless $view->{name} eq 'pods';
+    my $res = $self->{_resources}[$self->{_selected_row}];
+    return unless $res;
+
+    my @lines;
+    push @lines, "=== Logs: " . $res->name . " ===";
+    push @lines, "Namespace: " . ($self->{config}->get('namespace') // 'default');
+    push @lines, "Status: " . $res->status;
+    push @lines, "";
+
+    my $result = $self->{kubectl}->get_logs(
+        name => $res->name,
+        namespace => $self->{config}->get('namespace'),
+        tail => 200,
+    );
+
+    if ($result->{logs}) {
+        my @log_lines = split(/\n/, $result->{logs});
+        push @lines, @log_lines;
+    } else {
+        push @lines, "(no logs available)";
+    }
+
+    push @lines, "";
+    push @lines, "=== Describe ===";
+    push @lines, "";
+
+    my $desc = $self->{kubectl}->get_describe(
+        resource => 'pod',
+        name => $res->name,
+        namespace => $self->{config}->get('namespace'),
+    );
+
+    if ($desc->{output}) {
+        push @lines, split(/\n/, $desc->{output});
+    }
+
+    $self->{_log_view} = 1;
+    $self->{_log_lines} = \@lines;
+    $self->{_log_scroll} = 0;
+    $self->_render_logs();
+}
+
+sub _view_metrics {
+    my ($self) = @_;
+    return unless $self->{_resources} && @{$self->{_resources}};
+    my $view = $VIEWS[$self->{_current_view}];
+    return unless $view->{name} eq 'pods';
+    my $res = $self->{_resources}[$self->{_selected_row}];
+    return unless $res;
+
+    my @lines;
+    push @lines, "=== Resource Requests/Limits: " . $res->name . " ===";
+    push @lines, "";
+
+    my $raw = $res->raw;
+    if ($raw && $raw->{spec} && $raw->{spec}{containers}) {
+        for my $c (@{$raw->{spec}{containers}}) {
+            push @lines, "Container: " . ($c->{name} // 'unknown');
+            my $req = $c->{resources}{requests};
+            my $lim = $c->{resources}{limits};
+
+            if ($req) {
+                push @lines, "  Requests: CPU=" . ($req->{cpu} // '-') . "  MEM=" . ($req->{memory} // '-');
+            }
+            if ($lim) {
+                push @lines, "  Limits:   CPU=" . ($lim->{cpu} // '-') . "  MEM=" . ($lim->{memory} // '-');
+            }
+            push @lines, "" if $req || $lim;
+        }
+    } else {
+        push @lines, "(no resource info in spec)";
+    }
+
+    push @lines, "";
+    push @lines, "=== Live Metrics (top pods) ===";
+    push @lines, "";
+
+    my $top = $self->{kubectl}->get_top_pods(
+        namespace => $self->{config}->get('namespace'),
+    );
+
+    if ($top->{output}) {
+        my @top_lines = split(/\n/, $top->{output});
+        for my $line (@top_lines) {
+            push @lines, $line if $line =~ /$res->name/;
+        }
+        if (!grep { /$res->name/ } @top_lines) {
+            push @lines, "(pod not found in metrics)";
+        }
+    } else {
+        push @lines, "(metrics-server not available)";
+    }
+
+    $self->{_metrics_view} = 1;
+    $self->{_metrics_lines} = \@lines;
+    $self->{_metrics_scroll} = 0;
+    $self->_render_metrics();
 }
 
 sub _port_forward {
@@ -745,8 +887,35 @@ sub _render_logs {
         $row++;
     }
 
-    my $footer = sprintf("j/k: scroll  q/Escape: close  [%d-%d/%d]",
+    my $footer = sprintf("j/k: scroll  g/G: top/bottom  q/Escape: close  [%d-%d/%d]",
         $start + 1, $end + 1, scalar @{$self->{_log_lines}});
+    $win->printAt($win->lines - 1, 0, $footer, 0);
+}
+
+sub _render_metrics {
+    my ($self) = @_;
+    my $win = $self->{_root_window};
+    return unless $win;
+    return unless $self->{_metrics_view};
+
+    for my $i (0..$win->lines - 1) {
+        $win->eraseAt($i, 0, $win->cols);
+    }
+
+    my $max_lines = $win->lines - 2;
+    my $start = $self->{_metrics_scroll};
+    my $end = $start + $max_lines;
+    $end = scalar @{$self->{_metrics_lines}} - 1 if $end >= scalar @{$self->{_metrics_lines}};
+
+    my $row = 0;
+    for my $i ($start..$end) {
+        my $line = $self->{_metrics_lines}[$i] // '';
+        $win->printAt($row, 0, substr($line, 0, $win->cols), 0);
+        $row++;
+    }
+
+    my $footer = sprintf("j/k: scroll  q/Escape: close  [%d-%d/%d]",
+        $start + 1, $end + 1, scalar @{$self->{_metrics_lines}});
     $win->printAt($win->lines - 1, 0, $footer, 0);
 }
 

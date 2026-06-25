@@ -41,6 +41,18 @@ package MockKubectl {
     sub get_rolebindings { return { items => [] } }
     sub get_clusterrolebindings { return { items => [] } }
     sub get_storageclasses { return { items => [] } }
+    sub get_logs {
+        my ($self, %args) = @_;
+        return { logs => "line1\nline2\nline3\n" };
+    }
+    sub get_describe {
+        my ($self, %args) = @_;
+        return { output => "Name: nginx\nStatus: Running\n" };
+    }
+    sub get_top_pods {
+        my ($self, %args) = @_;
+        return { output => "nginx  100m  128Mi\n" };
+    }
     sub _run {
         my ($self, @cmd) = @_;
         if (grep { $_ eq 'pods' } @cmd) {

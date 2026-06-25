@@ -67,6 +67,43 @@ sub get_rolebindings            { $_[0]->_get('rolebindings', @_[1..$#_]) }
 sub get_clusterrolebindings     { $_[0]->_get('clusterrolebindings') }
 sub get_storageclasses          { $_[0]->_get('storageclasses') }
 
+sub get_logs {
+    my ($self, %args) = @_;
+    my $name = delete $args{name} or return {};
+    my @cmd = ('logs', $name, '--tail=' . ($args{tail} // 100));
+    push @cmd, '--namespace', $args{namespace} if $args{namespace};
+    push @cmd, '--previous' if $args{previous};
+    push @cmd, '-c', $args{container} if $args{container};
+    my ($stdout, $stderr) = $self->_run(@cmd);
+    if ($stderr && $stderr =~ /error/i) {
+        return { error => $stderr };
+    }
+    return { logs => $stdout // '' };
+}
+
+sub get_describe {
+    my ($self, %args) = @_;
+    my $resource = delete $args{resource} or return {};
+    my $name = delete $args{name};
+    my @cmd = ('describe', $resource);
+    push @cmd, $name if $name;
+    push @cmd, '--namespace', $args{namespace} if $args{namespace};
+    my ($stdout, $stderr) = $self->_run(@cmd);
+    if ($stderr && $stderr =~ /error/i) {
+        return { error => $stderr };
+    }
+    return { output => $stdout // '' };
+}
+
+sub get_top_pods {
+    my ($self, %args) = @_;
+    my @cmd = ('top', 'pods', '--no-headers');
+    push @cmd, '--namespace', $args{namespace} if $args{namespace};
+    push @cmd, '--containers' if $args{containers};
+    my ($stdout, $stderr) = $self->_run(@cmd);
+    return { output => $stdout // '', error => $stderr };
+}
+
 sub _run {
     my ($self, @cmd) = @_;
     
