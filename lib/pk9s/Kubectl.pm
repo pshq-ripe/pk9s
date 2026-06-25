@@ -70,7 +70,9 @@ sub get_storageclasses          { $_[0]->_get('storageclasses') }
 sub get_logs {
     my ($self, %args) = @_;
     my $name = delete $args{name} or return {};
-    my @cmd = ('logs', $name, '--tail=' . ($args{tail} // 100));
+    my @cmd = ($self->{kubectl});
+    push @cmd, '--context', $self->{context} if $self->{context};
+    push @cmd, 'logs', $name, '--tail=' . ($args{tail} // 100);
     push @cmd, '--namespace', $args{namespace} if $args{namespace};
     push @cmd, '--previous' if $args{previous};
     push @cmd, '-c', $args{container} if $args{container};
@@ -85,7 +87,9 @@ sub get_describe {
     my ($self, %args) = @_;
     my $resource = delete $args{resource} or return {};
     my $name = delete $args{name};
-    my @cmd = ('describe', $resource);
+    my @cmd = ($self->{kubectl});
+    push @cmd, '--context', $self->{context} if $self->{context};
+    push @cmd, 'describe', $resource;
     push @cmd, $name if $name;
     push @cmd, '--namespace', $args{namespace} if $args{namespace};
     my ($stdout, $stderr) = $self->_run(@cmd);
@@ -97,7 +101,9 @@ sub get_describe {
 
 sub get_top_pods {
     my ($self, %args) = @_;
-    my @cmd = ('top', 'pods', '--no-headers');
+    my @cmd = ($self->{kubectl});
+    push @cmd, '--context', $self->{context} if $self->{context};
+    push @cmd, 'top', 'pods', '--no-headers';
     push @cmd, '--namespace', $args{namespace} if $args{namespace};
     push @cmd, '--containers' if $args{containers};
     my ($stdout, $stderr) = $self->_run(@cmd);

@@ -116,12 +116,12 @@ sub _init_plugins {
 
 sub _build_ui {
     my ($self) = @_;
-    $self->{_root_window} = $self->{_tickit}->root;
+    $self->{_root_window} = $self->{_tickit}->rootwin;
 }
 
 sub _setup_keybindings {
     my ($self) = @_;
-    my $term = $self->{_tickit}->term;
+    my $t = $self->{_tickit};
 
     my %handlers = (
         'j'     => sub { $self->_key_down() },
@@ -133,7 +133,7 @@ sub _setup_keybindings {
         'G'     => sub { $self->_key_end() },
         'End'   => sub { $self->_key_end() },
         'Tab'   => sub { $self->_switch_view(1); $self->_refresh_data(); },
-        'BTab'  => sub { $self->_switch_view(-1); $self->_refresh_data(); },
+        'S-Tab' => sub { $self->_switch_view(-1); $self->_refresh_data(); },
         'r'     => sub { $self->_refresh_data() },
         '?'     => sub { $self->{_show_help} = 1; $self->_render_help(); },
         'q'     => sub {
@@ -142,7 +142,7 @@ sub _setup_keybindings {
             for my $pid (keys %{$self->{_portforwards}}) {
                 $ops->kill_portforward($pid);
             }
-            $self->{_tickit}->stop;
+            $t->stop;
         },
         'C-c'   => sub {
             require pk9s::Ops;
@@ -150,7 +150,7 @@ sub _setup_keybindings {
             for my $pid (keys %{$self->{_portforwards}}) {
                 $ops->kill_portforward($pid);
             }
-            $self->{_tickit}->stop;
+            $t->stop;
         },
         '/'     => sub {
             $self->{_search_active} = 1;
@@ -186,108 +186,9 @@ sub _setup_keybindings {
         'p'     => sub { $self->_list_plugins() },
     );
 
-    $term->cb_keypress(sub {
-        my ($type, $str) = @_;
-        return unless $type eq 'key';
-
-        if ($self->{_show_help}) {
-            $self->{_show_help} = 0;
-            $self->_render_table();
-            return;
-        }
-
-        if ($self->{_log_view}) {
-            if ($str eq 'j' || $str eq 'Down') {
-                $self->{_log_scroll}++ if $self->{_log_scroll} < scalar @{$self->{_log_lines}} - 1;
-                $self->_render_logs();
-                return;
-            }
-            if ($str eq 'k' || $str eq 'Up') {
-                $self->{_log_scroll}-- if $self->{_log_scroll} > 0;
-                $self->_render_logs();
-                return;
-            }
-            if ($str eq 'q' || $str eq 'Escape') {
-                $self->{_log_view} = 0;
-                $self->_render_table();
-                return;
-            }
-            if ($str eq 'G') {
-                $self->{_log_scroll} = scalar @{$self->{_log_lines}} - 1;
-                $self->_render_logs();
-                return;
-            }
-            if ($str eq 'g') {
-                $self->{_log_scroll} = 0;
-                $self->_render_logs();
-                return;
-            }
-            return;
-        }
-
-        if ($self->{_metrics_view}) {
-            if ($str eq 'j' || $str eq 'Down') {
-                $self->{_metrics_scroll}++ if $self->{_metrics_scroll} < scalar @{$self->{_metrics_lines}} - 1;
-                $self->_render_metrics();
-                return;
-            }
-            if ($str eq 'k' || $str eq 'Up') {
-                $self->{_metrics_scroll}-- if $self->{_metrics_scroll} > 0;
-                $self->_render_metrics();
-                return;
-            }
-            if ($str eq 'q' || $str eq 'Escape') {
-                $self->{_metrics_view} = 0;
-                $self->_render_table();
-                return;
-            }
-            return;
-        }
-
-        if ($self->{_ai_view}) {
-            if ($str eq 'j' || $str eq 'Down') {
-                $self->{_ai_scroll}++ if $self->{_ai_scroll} < scalar @{$self->{_ai_lines}} - 1;
-                $self->_render_ai();
-                return;
-            }
-            if ($str eq 'k' || $str eq 'Up') {
-                $self->{_ai_scroll}-- if $self->{_ai_scroll} > 0;
-                $self->_render_ai();
-                return;
-            }
-            if ($str eq 'q' || $str eq 'Escape') {
-                $self->{_ai_view} = 0;
-                $self->_render_table();
-                return;
-            }
-            return;
-        }
-
-        if ($self->{_confirm_action}) {
-            $self->_handle_confirm($str);
-            return;
-        }
-
-        if ($self->{_search_active}) {
-            if (length($str) == 1 && $str =~ /[[:print:]]/) {
-                $self->{_search_query} .= $str;
-                $self->_apply_search();
-                $self->_render_search();
-                $self->_render_table();
-                return;
-            }
-            if ($str eq 'Backspace') {
-                $self->{_search_query} =~ s/.$//;
-                $self->_apply_search();
-                $self->_render_search();
-                $self->_render_table();
-                return;
-            }
-        }
-
-        my $handler = $handlers{$str};
-        $handler->() if $handler;
-    });
+    for my $key (keys %handlers) {
+        $t->bind_key($key, $handlers{$key});
+    }
 }
 
 sub _key_down {
@@ -318,15 +219,34 @@ sub _key_end {
 
 sub _setup_timer {
     my ($self) = @_;
-    require Tickit::Timer;
-    Tickit::Timer->import;
-    $self->{_timer} = Tickit::Timer->interval(
-        $self->{_refresh_interval},
-        sub {
-            return if $self->{_show_help};
-            $self->_refresh_data();
-        },
-    );
+    eval {
+        require Tickit::Timer;
+        Tickit::Timer->import;
+        $self->{_timer} = Tickit::Timer->interval(
+            $self->{_refresh_interval},
+            sub {
+                return if $self->{_show_help};
+                $self->_refresh_data();
+            },
+        );
+    };
+    if ($@) {
+        $self->{_timer_pid} = fork();
+        if ($self->{_timer_pid} == 0) {
+            while (1) {
+                sleep $self->{_refresh_interval};
+                kill 'USR1', getppid();
+            }
+        }
+        $self->{_tickit}->term->set_utf8(1);
+        eval {
+            require POSIX;
+            POSIX::sigaction(
+                POSIX::SIGUSR1(),
+                POSIX::SigAction->new(sub { $self->_refresh_data() }),
+            );
+        };
+    }
 }
 
 sub _refresh_data {
