@@ -4,6 +4,7 @@ use warnings;
 
 use pk9s::Resource;
 use Term::ANSIColor;
+use Tickit::RenderBuffer;
 
 my @VIEWS = (
     # Core
@@ -118,6 +119,9 @@ sub _init_plugins {
 sub _build_ui {
     my ($self) = @_;
     $self->{_root_window} = $self->{_tickit}->rootwin;
+    $self->{_root_window}->bind_event("expose", sub {
+        $self->_render_all();
+    });
 }
 
 sub _setup_keybindings {
@@ -220,17 +224,14 @@ sub _key_end {
 
 sub _setup_timer {
     my ($self) = @_;
-    eval {
-        require Tickit::Timer;
-        Tickit::Timer->import;
-        $self->{_timer} = Tickit::Timer->interval(
-            $self->{_refresh_interval},
-            sub {
-                return if $self->{_show_help};
-                $self->_refresh_data();
-            },
-        );
-    };
+    my $interval = $self->{_refresh_interval};
+    my $tickit = $self->{_tickit};
+    $self->{_timer_id} = $tickit->timer(
+        "after", $interval, sub {
+            $self->_refresh_data() unless $self->{_show_help};
+            return;
+        },
+    );
 }
 
 sub _refresh_data {
@@ -260,17 +261,46 @@ sub _refresh_data {
     $self->_render_table();
 }
 
+sub _render_all {
+    my ($self) = @_;
+    if ($self->{_show_help}) {
+        $self->_render_help();
+    } elsif ($self->{_log_view}) {
+        $self->_render_logs();
+    } elsif ($self->{_metrics_view}) {
+        $self->_render_metrics();
+    } elsif ($self->{_ai_view}) {
+        $self->_render_ai();
+    } else {
+        $self->_render_table();
+    }
+}
+
+sub _get_rb {
+    my ($self) = @_;
+    my $win = $self->{_root_window};
+    return unless $win;
+    my $rb = Tickit::RenderBuffer->new(
+        lines => $win->lines,
+        cols => $win->cols,
+    );
+    return $rb;
+}
+
 sub _render_table {
     my ($self) = @_;
     my $win = $self->{_root_window};
     return unless $win;
 
+    my $rb = $self->_get_rb;
+    my $pen = Tickit::Pen->new();
+    $rb->erase_at(0, 0, $win->cols, $pen);
+
     my $view = $VIEWS[$self->{_current_view}];
     my $cols = $view->{columns};
 
-    # Use filtered resources when search is active
-    my $resources = $self->{_search_active} 
-        ? $self->{_filtered_resources} 
+    my $resources = $self->{_search_active}
+        ? $self->{_filtered_resources}
         : $self->{_resources};
 
     my @widths = map { length($_) + 2 } @$cols;
@@ -286,10 +316,10 @@ sub _render_table {
     for my $i (0..$#$cols) {
         $header .= sprintf("%-*s", $widths[$i], $cols->[$i]);
     }
-    $win->printAt(0, 0, $header, 0);
+    $rb->text_at(0, 0, $header);
 
     my $sep = '─' x ($win->cols - 1);
-    $win->printAt(1, 0, $sep, 0);
+    $rb->text_at(1, 0, $sep);
 
     my $row_num = 2;
     my $start = $self->{_scroll_offset};
@@ -315,17 +345,14 @@ sub _render_table {
             $line .= $val;
         }
 
-        my $pen = $is_selected ? 1 : 0;
-        $win->printAt($row_num, 0, $line, $pen);
+        $rb->text_at($row_num, 0, $line);
         $row_num++;
     }
 
-    for my $i ($row_num..$visible + 1) {
-        $win->eraseAt($i, 0, $win->cols);
-    }
-
     my $footer = sprintf("j/k: navigate  Tab: switch view  r: refresh  ?: help  q: quit");
-    $win->printAt($win->lines - 1, 0, $footer, 0);
+    $rb->text_at($win->lines - 1, 0, $footer);
+
+    $win->flush;
 }
 
 sub _render_search {
@@ -333,22 +360,27 @@ sub _render_search {
     my $win = $self->{_root_window};
     return unless $win;
 
+    my $rb = $self->_get_rb;
     my $query = $self->{_search_query};
     my $count = scalar @{$self->{_filtered_resources}};
     my $total = scalar @{$self->{_resources}};
 
     my $line = sprintf("/ %-50s [%d/%d]", $query, $count, $total);
-    $win->printAt($win->lines - 1, 0, $line, 0);
+    $rb->text_at($win->lines - 1, 0, $line);
+    $win->flush;
 }
 
 sub _render_help {
     my ($self) = @_;
     my $win = $self->{_root_window};
     return unless $win;
-    
+
+    my $rb = $self->_get_rb;
+    $rb->erase_at(0, 0, $win->cols, Tickit::Pen->new());
+
     my $box_width = 50;
     my $sep_line = "\x{2500}" x ($box_width - 2);
-    
+
     my @help_lines = (
         'pk9s — Help',
         '',
@@ -381,29 +413,26 @@ sub _render_help {
         '',
         'Press any key to close',
     );
-    
-    for my $i (0..$win->lines - 1) {
-        $win->eraseAt($i, 0, $win->cols);
-    }
-    
+
     my $box_left = ($win->cols - $box_width) / 2;
     my $box_top = 2;
-    
-    $win->printAt($box_top, $box_left, "\x{250c}" . $sep_line . "\x{2510}", 0);
-    
+
+    $rb->text_at($box_top, $box_left, "\x{250c}" . $sep_line . "\x{2510}");
+
     for my $i (0..$#help_lines) {
         my $line = $help_lines[$i];
         my $padded;
-        
+
         if ($line eq '' && ($i == 1 || $i == $#help_lines - 1)) {
             $padded = "\x{251c}" . $sep_line . "\x{2524}";
         } else {
             $padded = sprintf("\x{2502} %-*s \x{2502}", $box_width - 4, $line);
         }
-        $win->printAt($box_top + 1 + $i, $box_left, $padded, 0);
+        $rb->text_at($box_top + 1 + $i, $box_left, $padded);
     }
-    
-    $win->printAt($box_top + scalar(@help_lines) + 1, $box_left, "\x{2514}" . $sep_line . "\x{2518}", 0);
+
+    $rb->text_at($box_top + scalar(@help_lines) + 1, $box_left, "\x{2514}" . $sep_line . "\x{2518}");
+    $win->flush;
 }
 
 sub _switch_view {
@@ -719,6 +748,7 @@ sub _render_confirm {
     return unless $win;
     return unless $self->{_confirm_action};
 
+    my $rb = $self->_get_rb;
     my $action = $self->{_confirm_action};
     my $msg = $action->{message} // '';
 
@@ -729,7 +759,8 @@ sub _render_confirm {
     }
 
     my $line = $win->lines - 1;
-    $win->printAt($line, 0, sprintf("%-*s", $win->cols, $msg), 0);
+    $rb->text_at($line, 0, sprintf("%-*s", $win->cols, $msg));
+    $win->flush;
 }
 
 sub _handle_confirm {
@@ -775,9 +806,8 @@ sub _render_logs {
     return unless $win;
     return unless $self->{_log_view};
 
-    for my $i (0..$win->lines - 1) {
-        $win->eraseAt($i, 0, $win->cols);
-    }
+    my $rb = $self->_get_rb;
+    $rb->erase_at(0, 0, $win->cols, Tickit::Pen->new());
 
     my $max_lines = $win->lines - 2;
     my $start = $self->{_log_scroll};
@@ -787,13 +817,14 @@ sub _render_logs {
     my $row = 0;
     for my $i ($start..$end) {
         my $line = $self->{_log_lines}[$i] // '';
-        $win->printAt($row, 0, substr($line, 0, $win->cols), 0);
+        $rb->text_at($row, 0, substr($line, 0, $win->cols));
         $row++;
     }
 
     my $footer = sprintf("j/k: scroll  g/G: top/bottom  q/Escape: close  [%d-%d/%d]",
         $start + 1, $end + 1, scalar @{$self->{_log_lines}});
-    $win->printAt($win->lines - 1, 0, $footer, 0);
+    $rb->text_at($win->lines - 1, 0, $footer);
+    $win->flush;
 }
 
 sub _render_metrics {
@@ -802,9 +833,8 @@ sub _render_metrics {
     return unless $win;
     return unless $self->{_metrics_view};
 
-    for my $i (0..$win->lines - 1) {
-        $win->eraseAt($i, 0, $win->cols);
-    }
+    my $rb = $self->_get_rb;
+    $rb->erase_at(0, 0, $win->cols, Tickit::Pen->new());
 
     my $max_lines = $win->lines - 2;
     my $start = $self->{_metrics_scroll};
@@ -814,13 +844,14 @@ sub _render_metrics {
     my $row = 0;
     for my $i ($start..$end) {
         my $line = $self->{_metrics_lines}[$i] // '';
-        $win->printAt($row, 0, substr($line, 0, $win->cols), 0);
+        $rb->text_at($row, 0, substr($line, 0, $win->cols));
         $row++;
     }
 
     my $footer = sprintf("j/k: scroll  q/Escape: close  [%d-%d/%d]",
         $start + 1, $end + 1, scalar @{$self->{_metrics_lines}});
-    $win->printAt($win->lines - 1, 0, $footer, 0);
+    $rb->text_at($win->lines - 1, 0, $footer);
+    $win->flush;
 }
 
 sub _analyze_resource {
@@ -874,9 +905,8 @@ sub _render_ai {
     return unless $win;
     return unless $self->{_ai_view};
 
-    for my $i (0..$win->lines - 1) {
-        $win->eraseAt($i, 0, $win->cols);
-    }
+    my $rb = $self->_get_rb;
+    $rb->erase_at(0, 0, $win->cols, Tickit::Pen->new());
 
     my $max_lines = $win->lines - 2;
     my $start = $self->{_ai_scroll};
@@ -886,13 +916,14 @@ sub _render_ai {
     my $row = 0;
     for my $i ($start..$end) {
         my $line = $self->{_ai_lines}[$i] // '';
-        $win->printAt($row, 0, substr($line, 0, $win->cols), 0);
+        $rb->text_at($row, 0, substr($line, 0, $win->cols));
         $row++;
     }
 
     my $footer = sprintf("j/k: scroll  q/Escape: close  [%d-%d/%d]",
         $start + 1, $end + 1, scalar @{$self->{_ai_lines}});
-    $win->printAt($win->lines - 1, 0, $footer, 0);
+    $rb->text_at($win->lines - 1, 0, $footer);
+    $win->flush;
 }
 
 sub _list_plugins {
