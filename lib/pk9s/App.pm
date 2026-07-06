@@ -94,6 +94,7 @@ sub run {
     $self->_init_context();
     $self->_init_plugins();
     $self->_refresh_data();
+    $self->{_root_window}->expose;
     $self->{_tickit}->run;
 }
 
@@ -120,6 +121,8 @@ sub _build_ui {
     my ($self) = @_;
     $self->{_root_window} = $self->{_tickit}->rootwin;
     $self->{_root_window}->bind_event("expose", sub {
+        my ($win, undef, $info) = @_;
+        $self->{_current_rb} = $info->rb;
         $self->_render_all();
     });
 }
@@ -276,25 +279,14 @@ sub _render_all {
     }
 }
 
-sub _get_rb {
-    my ($self) = @_;
-    my $win = $self->{_root_window};
-    return unless $win;
-    my $rb = Tickit::RenderBuffer->new(
-        lines => $win->lines,
-        cols => $win->cols,
-    );
-    return $rb;
-}
 
 sub _render_table {
     my ($self) = @_;
     my $win = $self->{_root_window};
     return unless $win;
 
-    my $rb = $self->_get_rb;
-    my $pen = Tickit::Pen->new();
-    $rb->erase_at(0, 0, $win->cols, $pen);
+    my $rb = $self->{_current_rb};
+    return unless $rb;
 
     my $view = $VIEWS[$self->{_current_view}];
     my $cols = $view->{columns};
@@ -302,6 +294,7 @@ sub _render_table {
     my $resources = $self->{_search_active}
         ? $self->{_filtered_resources}
         : $self->{_resources};
+    print STDERR "DEBUG: resources count = " . scalar(@$resources) . "\n";
 
     my @widths = map { length($_) + 2 } @$cols;
     for my $res (@$resources) {
@@ -324,6 +317,7 @@ sub _render_table {
     my $row_num = 2;
     my $start = $self->{_scroll_offset};
     my $visible = $win->lines - 3;
+    print STDERR "DEBUG: visible rows = $visible, win->lines = " . $win->lines . "\n";
 
     my $search = $self->{_search_regex} ? do { require pk9s::Search; pk9s::Search->new() } : undef;
 
@@ -345,6 +339,7 @@ sub _render_table {
             $line .= $val;
         }
 
+        print STDERR "DEBUG: text_at row=$row_num line='$line'\n";
         $rb->text_at($row_num, 0, $line);
         $row_num++;
     }
@@ -352,7 +347,7 @@ sub _render_table {
     my $footer = sprintf("j/k: navigate  Tab: switch view  r: refresh  ?: help  q: quit");
     $rb->text_at($win->lines - 1, 0, $footer);
 
-    $win->flush;
+    my $term = $self->{_tickit}->term; $rb->flush_to_term($term);
 }
 
 sub _render_search {
@@ -360,14 +355,15 @@ sub _render_search {
     my $win = $self->{_root_window};
     return unless $win;
 
-    my $rb = $self->_get_rb;
+    my $rb = $self->{_current_rb};
+    return unless $rb;
     my $query = $self->{_search_query};
     my $count = scalar @{$self->{_filtered_resources}};
     my $total = scalar @{$self->{_resources}};
 
     my $line = sprintf("/ %-50s [%d/%d]", $query, $count, $total);
     $rb->text_at($win->lines - 1, 0, $line);
-    $win->flush;
+    my $term = $self->{_tickit}->term; $rb->flush_to_term($term);
 }
 
 sub _render_help {
@@ -375,7 +371,8 @@ sub _render_help {
     my $win = $self->{_root_window};
     return unless $win;
 
-    my $rb = $self->_get_rb;
+    my $rb = $self->{_current_rb};
+    return unless $rb;
     $rb->erase_at(0, 0, $win->cols, Tickit::Pen->new());
 
     my $box_width = 50;
@@ -432,7 +429,7 @@ sub _render_help {
     }
 
     $rb->text_at($box_top + scalar(@help_lines) + 1, $box_left, "\x{2514}" . $sep_line . "\x{2518}");
-    $win->flush;
+    my $term = $self->{_tickit}->term; $rb->flush_to_term($term);
 }
 
 sub _switch_view {
@@ -748,7 +745,8 @@ sub _render_confirm {
     return unless $win;
     return unless $self->{_confirm_action};
 
-    my $rb = $self->_get_rb;
+    my $rb = $self->{_current_rb};
+    return unless $rb;
     my $action = $self->{_confirm_action};
     my $msg = $action->{message} // '';
 
@@ -760,7 +758,7 @@ sub _render_confirm {
 
     my $line = $win->lines - 1;
     $rb->text_at($line, 0, sprintf("%-*s", $win->cols, $msg));
-    $win->flush;
+    my $term = $self->{_tickit}->term; $rb->flush_to_term($term);
 }
 
 sub _handle_confirm {
@@ -806,7 +804,8 @@ sub _render_logs {
     return unless $win;
     return unless $self->{_log_view};
 
-    my $rb = $self->_get_rb;
+    my $rb = $self->{_current_rb};
+    return unless $rb;
     $rb->erase_at(0, 0, $win->cols, Tickit::Pen->new());
 
     my $max_lines = $win->lines - 2;
@@ -824,7 +823,7 @@ sub _render_logs {
     my $footer = sprintf("j/k: scroll  g/G: top/bottom  q/Escape: close  [%d-%d/%d]",
         $start + 1, $end + 1, scalar @{$self->{_log_lines}});
     $rb->text_at($win->lines - 1, 0, $footer);
-    $win->flush;
+    my $term = $self->{_tickit}->term; $rb->flush_to_term($term);
 }
 
 sub _render_metrics {
@@ -833,7 +832,8 @@ sub _render_metrics {
     return unless $win;
     return unless $self->{_metrics_view};
 
-    my $rb = $self->_get_rb;
+    my $rb = $self->{_current_rb};
+    return unless $rb;
     $rb->erase_at(0, 0, $win->cols, Tickit::Pen->new());
 
     my $max_lines = $win->lines - 2;
@@ -851,7 +851,7 @@ sub _render_metrics {
     my $footer = sprintf("j/k: scroll  q/Escape: close  [%d-%d/%d]",
         $start + 1, $end + 1, scalar @{$self->{_metrics_lines}});
     $rb->text_at($win->lines - 1, 0, $footer);
-    $win->flush;
+    my $term = $self->{_tickit}->term; $rb->flush_to_term($term);
 }
 
 sub _analyze_resource {
@@ -905,7 +905,8 @@ sub _render_ai {
     return unless $win;
     return unless $self->{_ai_view};
 
-    my $rb = $self->_get_rb;
+    my $rb = $self->{_current_rb};
+    return unless $rb;
     $rb->erase_at(0, 0, $win->cols, Tickit::Pen->new());
 
     my $max_lines = $win->lines - 2;
@@ -923,7 +924,7 @@ sub _render_ai {
     my $footer = sprintf("j/k: scroll  q/Escape: close  [%d-%d/%d]",
         $start + 1, $end + 1, scalar @{$self->{_ai_lines}});
     $rb->text_at($win->lines - 1, 0, $footer);
-    $win->flush;
+    my $term = $self->{_tickit}->term; $rb->flush_to_term($term);
 }
 
 sub _list_plugins {
