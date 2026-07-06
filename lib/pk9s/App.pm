@@ -294,8 +294,7 @@ sub _render_table {
     my $resources = $self->{_search_active}
         ? $self->{_filtered_resources}
         : $self->{_resources};
-    print STDERR "DEBUG: resources count = " . scalar(@$resources) . "\n";
-
+    
     my @widths = map { length($_) + 2 } @$cols;
     for my $res (@$resources) {
         my $row = $view->{extract}->($res);
@@ -317,8 +316,7 @@ sub _render_table {
     my $row_num = 2;
     my $start = $self->{_scroll_offset};
     my $visible = $win->lines - 3;
-    print STDERR "DEBUG: visible rows = $visible, win->lines = " . $win->lines . "\n";
-
+    
     my $search = $self->{_search_regex} ? do { require pk9s::Search; pk9s::Search->new() } : undef;
 
     for my $i ($start..$#$resources) {
@@ -339,8 +337,7 @@ sub _render_table {
             $line .= $val;
         }
 
-        print STDERR "DEBUG: text_at row=$row_num line='$line'\n";
-        $rb->text_at($row_num, 0, $line);
+                $rb->text_at($row_num, 0, $line);
         $row_num++;
     }
 
